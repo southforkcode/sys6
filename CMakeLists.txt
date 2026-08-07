@@ -3,6 +3,7 @@ project(sys6 CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
@@ -44,5 +45,18 @@ if(CLANG_FORMAT_EXE)
     add_custom_target(format
         COMMAND ${CLANG_FORMAT_EXE} -i ${FORMAT_SOURCE_FILES}
         COMMENT "Running clang-format on all source files"
+    )
+endif()
+
+find_program(CLANG_TIDY_EXE NAMES clang-tidy HINTS /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm/bin)
+
+if(CLANG_TIDY_EXE)
+    file(GLOB_RECURSE LINT_SOURCE_FILES
+        ${CMAKE_SOURCE_DIR}/src/*.cpp
+        ${CMAKE_SOURCE_DIR}/test/*.cpp
+    )
+    add_custom_target(lint
+        COMMAND ${CLANG_TIDY_EXE} -p ${CMAKE_BINARY_DIR} ${LINT_SOURCE_FILES}
+        COMMENT "Running clang-tidy on all source files"
     )
 endif()
