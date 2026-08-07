@@ -21,15 +21,12 @@ void Logger::log(log_level_t level, const std::string &message) {
         break;
     }
     m_os << message;
-    m_os << std::endl;
+    m_os << "\n";
 }
 
 void Logger::info(const std::string &message) { log(INFO, message); }
-
 void Logger::warn(const std::string &message) { log(WARNING, message); }
-
 void Logger::error(const std::string &message) { log(ERROR, message); }
-
 void Logger::debug(const std::string &message) { log(DEBUG, message); }
 void Logger::trace(const std::string &message) { log(TRACE, message); }
 void Logger::setDefaultLogLevel(log_level_t level) { m_defaultLogLevel = level; }
