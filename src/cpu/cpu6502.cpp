@@ -1,7 +1,7 @@
 #include "cpu6502.h"
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 const uint16_t cNMIVector = 0xfffa;
 const uint16_t cResetVector = 0xfffc;
@@ -15,113 +15,59 @@ const auto cBFlagOffset = 4;
 const auto cVFlagOffset = 6;
 const auto cNFlagOffset = 7;
 
-constexpr unsigned to_mask(unsigned offset) {
-    return 1 << offset;
-}
+constexpr unsigned to_mask(unsigned offset) { return 1 << offset; }
 
-uint8_t CPU6502::A() const {
-    return m_A;
-}
+uint8_t CPU6502::A() const { return m_A; }
 
-uint8_t CPU6502::X() const {
-    return m_X;
-}
+uint8_t CPU6502::X() const { return m_X; }
 
-uint8_t CPU6502::Y() const {
-    return m_Y;
-}
+uint8_t CPU6502::Y() const { return m_Y; }
 
-uint16_t CPU6502::PC() const {
-    return m_PC;
-}
+uint16_t CPU6502::PC() const { return m_PC; }
 
-uint16_t CPU6502::SP() const {
-    return m_SP;
-}
+uint16_t CPU6502::SP() const { return m_SP; }
 
-void CPU6502::A(uint8_t val) {
-    m_A = val;
-}
+void CPU6502::A(uint8_t val) { m_A = val; }
 
-void CPU6502::X(uint8_t val) {
-    m_X = val;
-}
+void CPU6502::X(uint8_t val) { m_X = val; }
 
-void CPU6502::Y(uint8_t val) {
-    m_Y = val;
-}
+void CPU6502::Y(uint8_t val) { m_Y = val; }
 
-void CPU6502::PC(uint16_t val) {
-    m_PC = val;
-}
+void CPU6502::PC(uint16_t val) { m_PC = val; }
 
-void CPU6502::SP(uint8_t val) {
-    m_SP = val;
-}
+void CPU6502::SP(uint8_t val) { m_SP = val; }
 
-uint8_t CPU6502::P() const {
-    return m_pFlags.to_ulong() & 0xff;
-}
+uint8_t CPU6502::P() const { return m_pFlags.to_ulong() & 0xff; }
 
-void CPU6502::P(uint8_t val) {
-    m_pFlags = val;
-}
+void CPU6502::P(uint8_t val) { m_pFlags = val; }
 
-bool CPU6502::CFlag() const {
-    return m_pFlags.test(cCFlagOffset);
-}
+bool CPU6502::CFlag() const { return m_pFlags.test(cCFlagOffset); }
 
-void CPU6502::CFlag(bool val) {
-    m_pFlags.set(cCFlagOffset, val);
-}
+void CPU6502::CFlag(bool val) { m_pFlags.set(cCFlagOffset, val); }
 
-bool CPU6502::ZFlag() const {
-    return m_pFlags.test(cZFlagOffset);
-}
+bool CPU6502::ZFlag() const { return m_pFlags.test(cZFlagOffset); }
 
-void CPU6502::ZFlag(bool val) {
-    m_pFlags.set(cZFlagOffset, val);
-}
+void CPU6502::ZFlag(bool val) { m_pFlags.set(cZFlagOffset, val); }
 
-bool CPU6502::IFlag() const {
-    return m_pFlags.test(cIFlagOffset);
-}
+bool CPU6502::IFlag() const { return m_pFlags.test(cIFlagOffset); }
 
-void CPU6502::IFlag(bool val) {
-    m_pFlags.set(cIFlagOffset, val);
-}
+void CPU6502::IFlag(bool val) { m_pFlags.set(cIFlagOffset, val); }
 
-bool CPU6502::DFlag() const {
-    return m_pFlags.test(cDFlagOffset);
-}
+bool CPU6502::DFlag() const { return m_pFlags.test(cDFlagOffset); }
 
-void CPU6502::DFlag(bool val) {
-    m_pFlags.set(cDFlagOffset, val);
-}
+void CPU6502::DFlag(bool val) { m_pFlags.set(cDFlagOffset, val); }
 
-bool CPU6502::BFlag() const {
-    return m_pFlags.test(cBFlagOffset);
-}
+bool CPU6502::BFlag() const { return m_pFlags.test(cBFlagOffset); }
 
-void CPU6502::BFlag(bool val) {
-    m_pFlags.set(cBFlagOffset, val);
-}
+void CPU6502::BFlag(bool val) { m_pFlags.set(cBFlagOffset, val); }
 
-bool CPU6502::VFlag() const {
-    return m_pFlags.test(cVFlagOffset);
-}
+bool CPU6502::VFlag() const { return m_pFlags.test(cVFlagOffset); }
 
-void CPU6502::VFlag(bool val) {
-    m_pFlags.set(cVFlagOffset, val);
-}
+void CPU6502::VFlag(bool val) { m_pFlags.set(cVFlagOffset, val); }
 
-bool CPU6502::NFlag() const {
-    return m_pFlags.test(cNFlagOffset);
-}
+bool CPU6502::NFlag() const { return m_pFlags.test(cNFlagOffset); }
 
-void CPU6502::NFlag(bool val) {
-    m_pFlags.set(cNFlagOffset, val);
-}
+void CPU6502::NFlag(bool val) { m_pFlags.set(cNFlagOffset, val); }
 
 void CPU6502::reset() {
     A(0);

@@ -31,3 +31,18 @@ if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(test)
 endif()
+
+find_program(CLANG_FORMAT_EXE NAMES clang-format HINTS /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm/bin)
+
+if(CLANG_FORMAT_EXE)
+    file(GLOB_RECURSE FORMAT_SOURCE_FILES
+        ${CMAKE_SOURCE_DIR}/src/*.cpp
+        ${CMAKE_SOURCE_DIR}/src/*.h
+        ${CMAKE_SOURCE_DIR}/test/*.cpp
+        ${CMAKE_SOURCE_DIR}/test/*.h
+    )
+    add_custom_target(format
+        COMMAND ${CLANG_FORMAT_EXE} -i ${FORMAT_SOURCE_FILES}
+        COMMENT "Running clang-format on all source files"
+    )
+endif()

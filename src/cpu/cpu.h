@@ -11,11 +11,11 @@ public:
     void Debug(bool val) { m_debug = val; }
     bool Tracing() const { return m_tracing; }
     void Tracing(bool val) { m_tracing = val; }
-    void setLogger(Logger* logger) { m_logger = logger; }
+    void setLogger(Logger *logger) { m_logger = logger; }
 
 protected:
     bool m_debug;
     bool m_tracing;
 
-    Logger* m_logger = nullptr;
+    Logger *m_logger = nullptr;
 };

@@ -2,9 +2,7 @@
 
 #include "cpu/cpu6502.h"
 
-TEST(CPU6502Smoke, GTestWiringWorks) {
-    EXPECT_TRUE(true);
-}
+TEST(CPU6502Smoke, GTestWiringWorks) { EXPECT_TRUE(true); }
 
 TEST(CPU6502Reset, SetsRegistersAndFlagsToPowerOnState) {
     CPU6502 cpu;

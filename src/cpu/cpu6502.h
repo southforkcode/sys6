@@ -2,8 +2,8 @@
 
 #include "cpu.h"
 
-#include <cstdint>
 #include <bitset>
+#include <cstdint>
 
 class CPU6502 : public CPU {
 public:
@@ -47,13 +47,11 @@ public:
     void VFlag(bool val);
     void NFlag(bool val);
 
-
-
 protected:
-    uint8_t m_A; // accumulator register
-    uint8_t m_X; // index register X
-    uint8_t m_Y; // index register Y
+    uint8_t m_A;   // accumulator register
+    uint8_t m_X;   // index register X
+    uint8_t m_Y;   // index register Y
     uint16_t m_PC; // program counter
-    uint8_t m_SP; // stack pointer
+    uint8_t m_SP;  // stack pointer
     std::bitset<8> m_pFlags;
 };
