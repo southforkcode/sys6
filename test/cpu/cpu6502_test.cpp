@@ -122,3 +122,31 @@ TEST(CPU6502Flags, SettingOneFlagDoesNotDisturbOthers) {
     EXPECT_FALSE(cpu.BFlag());
     EXPECT_FALSE(cpu.VFlag());
 }
+
+TEST(CPU6502StatusByte, SettingPIsReflectedByIndividualFlags) {
+    CPU6502 cpu;
+
+    // N=1 V=1 unused=0 B=1 D=0 I=1 Z=0 C=1
+    cpu.P(0b11010101);
+
+    EXPECT_TRUE(cpu.CFlag());
+    EXPECT_FALSE(cpu.ZFlag());
+    EXPECT_TRUE(cpu.IFlag());
+    EXPECT_FALSE(cpu.DFlag());
+    EXPECT_TRUE(cpu.BFlag());
+    EXPECT_TRUE(cpu.VFlag());
+    EXPECT_TRUE(cpu.NFlag());
+}
+
+TEST(CPU6502StatusByte, SettingIndividualFlagsIsReflectedByP) {
+    CPU6502 cpu;
+    cpu.P(0x00);
+
+    cpu.CFlag(true);
+    cpu.IFlag(true);
+    cpu.BFlag(true);
+    cpu.VFlag(true);
+    cpu.NFlag(true);
+
+    EXPECT_EQ(cpu.P(), 0b11010101);
+}
