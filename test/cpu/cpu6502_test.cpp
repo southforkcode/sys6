@@ -59,3 +59,66 @@ TEST(CPU6502Registers, SPRoundTripsBoundaryValues) {
     cpu.SP(0xFF);
     EXPECT_EQ(cpu.SP(), 0xFF);
 }
+
+TEST(CPU6502Flags, EachFlagRoundTripsIndependently) {
+    CPU6502 cpu;
+    cpu.P(0x00);
+
+    cpu.CFlag(true);
+    EXPECT_TRUE(cpu.CFlag());
+    cpu.CFlag(false);
+    EXPECT_FALSE(cpu.CFlag());
+
+    cpu.ZFlag(true);
+    EXPECT_TRUE(cpu.ZFlag());
+    cpu.ZFlag(false);
+    EXPECT_FALSE(cpu.ZFlag());
+
+    cpu.IFlag(true);
+    EXPECT_TRUE(cpu.IFlag());
+    cpu.IFlag(false);
+    EXPECT_FALSE(cpu.IFlag());
+
+    cpu.DFlag(true);
+    EXPECT_TRUE(cpu.DFlag());
+    cpu.DFlag(false);
+    EXPECT_FALSE(cpu.DFlag());
+
+    cpu.BFlag(true);
+    EXPECT_TRUE(cpu.BFlag());
+    cpu.BFlag(false);
+    EXPECT_FALSE(cpu.BFlag());
+
+    cpu.VFlag(true);
+    EXPECT_TRUE(cpu.VFlag());
+    cpu.VFlag(false);
+    EXPECT_FALSE(cpu.VFlag());
+
+    cpu.NFlag(true);
+    EXPECT_TRUE(cpu.NFlag());
+    cpu.NFlag(false);
+    EXPECT_FALSE(cpu.NFlag());
+}
+
+TEST(CPU6502Flags, SettingOneFlagDoesNotDisturbOthers) {
+    CPU6502 cpu;
+    cpu.P(0x00);
+
+    cpu.CFlag(true);
+    EXPECT_TRUE(cpu.CFlag());
+    EXPECT_FALSE(cpu.ZFlag());
+    EXPECT_FALSE(cpu.IFlag());
+    EXPECT_FALSE(cpu.DFlag());
+    EXPECT_FALSE(cpu.BFlag());
+    EXPECT_FALSE(cpu.VFlag());
+    EXPECT_FALSE(cpu.NFlag());
+
+    cpu.NFlag(true);
+    EXPECT_TRUE(cpu.CFlag());
+    EXPECT_TRUE(cpu.NFlag());
+    EXPECT_FALSE(cpu.ZFlag());
+    EXPECT_FALSE(cpu.IFlag());
+    EXPECT_FALSE(cpu.DFlag());
+    EXPECT_FALSE(cpu.BFlag());
+    EXPECT_FALSE(cpu.VFlag());
+}
