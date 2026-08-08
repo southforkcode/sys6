@@ -113,6 +113,8 @@ opcode-implementation pass adds its rows here.
 | `0xD0` | BNE | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
 | `0xF0` | BEQ | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
 | `0x00` | BRK | Implied | 2 | 7 | Full interrupt semantics — see below |
+| `0x20` | JSR | Absolute | 3 | 6 | Pushes PC of its own last byte — see below |
+| `0x60` | RTS | Implied | 1 | 6 | Pulls return address and adds one — see below |
 
 ## Divergences from real hardware
 
@@ -175,3 +177,13 @@ whatever (if anything) lives at the vector. See
 `docs/superpowers/specs/2026-08-08-relative-branches-and-utilities-design.md`
 for the full rationale, including why no `CLC`/`SEC` opcodes were needed
 alongside this change.
+
+**`JSR` pushes the address of its own last byte, not the next
+instruction's.** By the time `JSR` reads its operand's high byte, `PC`
+already points at that high byte's own address (the third and final byte of
+the instruction) — genuine real 6502 behavior, not a simplification. `JSR`
+pushes that value as-is; it is `RTS` that adds one back on the way out,
+landing on the actual next instruction rather than re-reading `JSR`'s last
+byte. This asymmetry is why the two must always be paired: pulling a
+`JSR`-pushed address with anything other than `RTS` (or a matching manual
+`+1`) returns to the wrong address.

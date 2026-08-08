@@ -11,6 +11,8 @@ const uint16_t cResetVector = 0xfffc;
 const uint16_t cBRKVector = 0xfffe;
 
 const uint8_t cOpBRK = 0x00;
+const uint8_t cOpJSR = 0x20;
+const uint8_t cOpRTS = 0x60;
 
 const uint8_t cOpADCImmediate = 0x69;
 const uint8_t cOpADCAbsolute = 0x6D;
@@ -454,6 +456,12 @@ void CPU6502::onClockHigh() {
     case cOpBRK:
         captureBRK();
         break;
+    case cOpJSR:
+        captureJSR();
+        break;
+    case cOpRTS:
+        captureRTS();
+        break;
     default:
         break; // unimplemented opcode: nothing to capture
     }
@@ -612,6 +620,12 @@ void CPU6502::onClockLow() {
         break;
     case cOpBRK:
         commitBRK();
+        break;
+    case cOpJSR:
+        commitJSR();
+        break;
+    case cOpRTS:
+        commitRTS();
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
@@ -1770,5 +1784,100 @@ void CPU6502::commitBRK() {
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T6.
+    }
+}
+
+void CPU6502::captureJSR() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2:
+    case CpuStep::T3:
+    case CpuStep::T4:
+        break; // idle: internal S predecrement (T2) and the two pushes (T3/T4) are driven from commit, where m_PC/m_SP are authoritative
+    case CpuStep::T5:
+        m_addrLatch = static_cast<uint16_t>((m_addrLatch & 0x00FF) | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::commitJSR() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        // PC now points at the operand's high byte -- that address (not the
+        // next instruction's) is what JSR pushes below.
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_bus.write(static_cast<uint16_t>(0x0100 + m_SP), static_cast<uint8_t>(m_PC >> 8));
+        m_SP--;
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        m_bus.write(static_cast<uint16_t>(0x0100 + m_SP), static_cast<uint8_t>(m_PC & 0xFF));
+        m_SP--;
+        m_cpuStep = CpuStep::T5;
+        break;
+    case CpuStep::T5:
+        m_PC = m_addrLatch;
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::captureRTS() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+    case CpuStep::T2:
+        break; // idle: dummy read of the padding byte (T1) and the S increment before the first pull (T2)
+    case CpuStep::T3:
+        m_addrLatch = m_bus.read(static_cast<uint16_t>(0x0100 + m_SP));
+        break;
+    case CpuStep::T4:
+        m_addrLatch =
+            static_cast<uint16_t>((m_addrLatch & 0x00FF) | (static_cast<uint16_t>(m_bus.read(static_cast<uint16_t>(0x0100 + m_SP))) << 8));
+        break;
+    case CpuStep::T5:
+        break; // idle: PC is loaded from m_addrLatch (+1) in commit
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::commitRTS() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        // Real hardware's dummy read of the byte after the opcode does not
+        // advance PC -- PC is about to be overwritten from the stack anyway.
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_SP++;
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_SP++;
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        m_cpuStep = CpuStep::T5;
+        break;
+    case CpuStep::T5:
+        // RTS pulls the address of JSR's own last byte, so add one to land
+        // on the instruction that actually follows the call.
+        m_PC = static_cast<uint16_t>(m_addrLatch + 1);
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
     }
 }

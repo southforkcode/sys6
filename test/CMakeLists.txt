@@ -15,6 +15,7 @@ add_executable(sys6_tests
     cpu/cpu6502_transfer_test.cpp
     cpu/cpu6502_branch_test.cpp
     cpu/cpu6502_brk_test.cpp
+    cpu/cpu6502_jsr_rts_test.cpp
     cpu/cpu6502_fibonacci_e2e_test.cpp
     cpu/cpu6502_addressing_test.cpp
     cpu/cpu6502_clock_test.cpp

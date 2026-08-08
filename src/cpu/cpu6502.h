@@ -200,4 +200,12 @@ private:
     // issuing further instructions -- see run().
     void captureBRK();
     void commitBRK();
+
+    // JSR/RTS: JSR pushes the address of its own last byte (not the next
+    // instruction) and jumps to its absolute operand; RTS pulls that
+    // address back and adds one to land on the actual next instruction.
+    void captureJSR();
+    void commitJSR();
+    void captureRTS();
+    void commitRTS();
 };
