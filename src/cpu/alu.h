@@ -10,6 +10,8 @@ struct AluResult {
     bool negative;
 };
 
+enum class AluFunction : uint8_t { ADD, AND, OR, XOR, SHL, SHR, ROL, ROR };
+
 class ALU {
 public:
     [[nodiscard]] AluResult adc(uint8_t acc, uint8_t operand, bool carryIn) const;
@@ -24,4 +26,6 @@ public:
     [[nodiscard]] AluResult ror(uint8_t value, bool carryIn) const;
     [[nodiscard]] AluResult increment(uint8_t value) const;
     [[nodiscard]] AluResult decrement(uint8_t value) const;
+
+    [[nodiscard]] AluResult execute(uint8_t a, uint8_t b, AluFunction function, bool carryIn) const;
 };

@@ -68,3 +68,29 @@ AluResult ALU::increment(uint8_t value) const {
 AluResult ALU::decrement(uint8_t value) const {
     return fromValue(static_cast<uint8_t>(value - 1), false, false);
 }
+
+AluResult ALU::execute(uint8_t a, uint8_t b, AluFunction function, bool carryIn) const {
+    switch (function) {
+    case AluFunction::ADD: {
+        int sum = static_cast<int>(a) + static_cast<int>(b) + (carryIn ? 1 : 0);
+        return AluResult{static_cast<uint8_t>(sum & 0xFF), sum > 0xFF, false, false, false};
+    }
+    case AluFunction::AND:
+        return AluResult{static_cast<uint8_t>(a & b), false, false, false, false};
+    case AluFunction::OR:
+        return AluResult{static_cast<uint8_t>(a | b), false, false, false, false};
+    case AluFunction::XOR:
+        return AluResult{static_cast<uint8_t>(a ^ b), false, false, false, false};
+    case AluFunction::SHL:
+        return AluResult{static_cast<uint8_t>(b << 1), (b & 0x80) != 0, false, false, false};
+    case AluFunction::SHR:
+        return AluResult{static_cast<uint8_t>(b >> 1), (b & 0x01) != 0, false, false, false};
+    case AluFunction::ROL:
+        return AluResult{static_cast<uint8_t>((b << 1) | (carryIn ? 0x01 : 0x00)), (b & 0x80) != 0, false, false,
+                          false};
+    case AluFunction::ROR:
+        return AluResult{static_cast<uint8_t>((b >> 1) | (carryIn ? 0x80 : 0x00)), (b & 0x01) != 0, false, false,
+                          false};
+    }
+    return AluResult{0, false, false, false, false}; // unreachable: all enumerators handled above
+}
