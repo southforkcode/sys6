@@ -44,6 +44,10 @@ keyboard or screen, only a serial line to a terminal. That means the
   (scripted input → asserted output transcript), following the existing
   Fibonacci e2e test's pattern of hex-string programs with per-instruction
   mnemonic comments.
+- A `README.md` section documenting `sys6-monitor`: how to build and run
+  it, and the peek/poke/list/run command syntax. Written once the
+  firmware is implemented and its e2e tests pass, so it documents actual
+  verified behavior rather than the plan for it.
 
 ## Non-goals
 
@@ -234,6 +238,10 @@ Behavior:
 in `CMakeLists.txt`, alongside the existing `sys6` target — `main.cpp` is
 untouched. `monitor_main.cpp` constructs a `PosixTerminalIO`, then a
 `System`, and calls `run()`.
+
+`README.md` gets a matching "Running the monitor" section: the build
+command for the new target, how to launch it, and the command syntax
+table from the Monitor firmware section above.
 
 ## Testing
 
