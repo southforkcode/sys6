@@ -1911,8 +1911,14 @@ Create `src/system/posix_terminal_io.cpp`:
 PosixTerminalIO::PosixTerminalIO() {
     tcgetattr(STDIN_FILENO, &m_savedTermios);
     struct termios raw = m_savedTermios;
-    raw.c_lflag &= ~(static_cast<tcflag_t>(ICANON | ECHO));
-    raw.c_oflag &= ~(static_cast<tcflag_t>(OPOST));
+    // cfmakeraw(), not a hand-rolled subset: a partial flip of just
+    // ICANON/ECHO/OPOST leaves ICRNL set, which silently remaps an
+    // incoming '\r' (what Enter actually sends) to '\n' before this
+    // process ever reads it -- and READ_LINE specifically checks for
+    // 0x0D, so it would never recognize end-of-line. (Caught by a
+    // pty-based smoke test in Step 5 below -- a piped/non-tty test can't
+    // catch this, since termios flags are meaningless without a real tty.)
+    cfmakeraw(&raw);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 0;
     tcsetattr(STDIN_FILENO, TCSANOW, &raw);
@@ -1974,11 +1980,49 @@ target_include_directories(sys6-monitor PRIVATE src)
 - [ ] **Step 4: Verify it builds**
 
 Run: `cmake -S . -B build && cmake --build build --target sys6-monitor 2>&1 | tail -30`
-Expected: builds successfully, produces `build/bin/sys6-monitor` (or wherever `CMAKE_RUNTIME_OUTPUT_DIRECTORY` points — check with `find build -name sys6-monitor -type f`).
+Expected: builds successfully. `CMAKE_RUNTIME_OUTPUT_DIRECTORY` isn't set, so with the default single-config Makefile generator the binary lands at `build/sys6-monitor` (not `build/bin/`) — confirm with `find build -maxdepth 1 -name sys6-monitor -type f`.
 
-- [ ] **Step 5: Manual smoke test**
+- [ ] **Step 5: Smoke test**
 
-Run the binary directly in an interactive terminal (not through a pipe, or `tryReadByte()` will just see EOF): `./build/bin/sys6-monitor` (adjust path per Step 4's `find` result). Expect to see `sys6 monitor` followed by a `> ` prompt. Type `0000` and press Enter — expect `0000: 00` echoed back followed by a fresh prompt. Press Ctrl-C to exit (there's no `QUIT` command in this "very basic" monitor; exiting is a Non-goal-adjacent detail intentionally left to the terminal's own signal handling).
+A plain pipe won't exercise this at all: `tcgetattr`/`cfmakeraw` are meaningless on a non-tty stdin, and `PosixTerminalIO` behaves differently (or fails outright) without a real terminal underneath it — this is the one part of the system no `std::ostringstream`-based test can reach. Two ways to verify, pick based on what's available:
+
+- **Interactive** (if you have a real terminal to type into): run `./build/sys6-monitor` directly. Expect `sys6 monitor` followed by a `> ` prompt. Type `0300` and press Enter — expect `0300: 00` echoed back followed by a fresh prompt (don't use `0000` — `LINEBUF` lives at RAM `$00`-`$3F`, so peeking an address in that range shows whatever the monitor's own line buffer currently holds, not "fresh" memory; see the e2e test comments in Task 5 for the full explanation). Press Ctrl-C to exit (there's no `QUIT` command in this "very basic" monitor).
+- **Scripted, via a real pseudo-terminal** (works headless — a background agent without a live keyboard can still genuinely exercise the raw-mode path, unlike a pipe): spawn the binary with Python's `pty` module so it gets a real tty, write test input to the master side, and assert on what comes back:
+
+  ```python
+  import os, pty, select, subprocess, sys, time
+
+  master_fd, slave_fd = pty.openpty()
+  proc = subprocess.Popen(["./build/sys6-monitor"], stdin=slave_fd, stdout=slave_fd,
+                           stderr=slave_fd, close_fds=True)
+  os.close(slave_fd)
+
+  def read_available(timeout=2.0):
+      data, end = b"", time.time() + timeout
+      while time.time() < end:
+          r, _, _ = select.select([master_fd], [], [], 0.2)
+          if master_fd in r:
+              chunk = os.read(master_fd, 4096)
+              if not chunk:
+                  break
+              data += chunk
+          elif data:
+              break
+      return data
+
+  banner = read_available()
+  os.write(master_fd, b"0300: AB\r")  # poke
+  poke_out = read_available()
+  os.write(master_fd, b"0300\r")      # peek it back
+  peek_out = read_available()
+  proc.terminate()
+
+  assert b"sys6 monitor" in banner
+  assert b"0300: AB" in poke_out
+  assert b"0300: AB" in peek_out  # round-trips through real termios raw mode
+  ```
+
+  This is exactly the kind of test that catches raw-mode setup bugs that no `std::ostringstream`-based unit test can reach (a hand-rolled subset of raw-mode flags that leaves `ICRNL` set, for example, silently remaps the '\r' Enter actually sends into '\n' before the process ever reads it — invisible to any test that doesn't go through a real tty).
 
 - [ ] **Step 6: Commit**
 
@@ -2010,7 +2054,7 @@ your real terminal through an emulated serial peripheral. Build and run
 it with:
 
     cmake --build build --target sys6-monitor
-    ./build/bin/sys6-monitor
+    ./build/sys6-monitor
 
 You'll see a `sys6 monitor` banner and a `>` prompt. Commands:
 
@@ -2029,8 +2073,8 @@ without changing memory.
 
 - [ ] **Step 2: Verify the build commands in the new section actually work**
 
-Run: `cmake --build build --target sys6-monitor && find build -name sys6-monitor -type f`
-Expected: matches the path written in the README (adjust the README's `./build/bin/sys6-monitor` line if the actual output path differs).
+Run: `cmake --build build --target sys6-monitor && find build -maxdepth 1 -name sys6-monitor -type f`
+Expected: matches the path written in the README (`./build/sys6-monitor` — adjust if the actual output path differs).
 
 - [ ] **Step 3: Commit**
 

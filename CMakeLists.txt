@@ -22,6 +22,23 @@ add_executable(sys6
 
 target_include_directories(sys6 PRIVATE src)
 
+add_executable(sys6-monitor
+    src/system/monitor_main.cpp
+    src/system/system.cpp
+    src/system/posix_terminal_io.cpp
+    src/system/monitor_firmware.cpp
+    src/peripherals/tty.cpp
+    src/cpu/alu.cpp
+    src/cpu/cpu6502.cpp
+    src/memory/ram.cpp
+    src/memory/rom.cpp
+    src/memory/bus.cpp
+    src/utils/log.cpp
+    src/utils/program_loader.cpp
+)
+
+target_include_directories(sys6-monitor PRIVATE src)
+
 option(BUILD_TESTING "Build unit tests" ON)
 
 if(BUILD_TESTING)
