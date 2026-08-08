@@ -16,6 +16,34 @@ Unit tests are built with GoogleTest (fetched automatically via CMake's
 
 Pass `-DBUILD_TESTING=OFF` to `cmake -S . -B build` to skip building tests.
 
+## Running the monitor
+
+`sys6-monitor` boots the emulated CPU straight into a hand-assembled 6502
+monitor program (in the spirit of WozMon/the KIM-1 monitor), talking to
+your real terminal through an emulated serial peripheral. Build and run
+it with:
+
+    cmake --build build --target sys6-monitor
+    ./build/sys6-monitor
+
+You'll see a `sys6 monitor` banner and a `>` prompt. Commands:
+
+| Syntax            | Effect                                              |
+|-------------------|-------------------------------------------------------|
+| `AAAA`            | peek: prints the byte at address `AAAA`               |
+| `AAAA.BBBB`       | list: hex-dumps that inclusive range, 16 bytes/row     |
+| `AAAA: BB BB BB`  | poke: writes the given bytes starting at `AAAA`        |
+| `AAAA R`          | run: jumps to `AAAA`; returns to the prompt on `RTS`   |
+
+Addresses and byte values are hex, 1–4 and 1–2 digits respectively
+(shorter values are zero-extended). Backspace corrects a typo before you
+press Enter. An unrecognized line prints `?` and returns to the prompt
+without changing memory.
+
+Note that the monitor's own line-input buffer lives at RAM `$0000`-`$003F`,
+so peeking or poking an address in that range shows the monitor's live
+working memory rather than untouched RAM.
+
 ## Formatting and linting
 
     cmake --build build --target format   # auto-format via clang-format
