@@ -244,10 +244,61 @@ untouched. `monitor_main.cpp` constructs a `PosixTerminalIO`, then a
 - `test/system/system_test.cpp`: calls `System::step()` a bounded number
   of times against a `FakeTerminalIO` to verify the read/inject/execute
   wiring, without ever calling the infinite `run()`.
-- `test/system/monitor_firmware_test.cpp`: end-to-end, same shape as
-  `cpu6502_fibonacci_e2e_test.cpp` — construct `RAM`+`TTY`+`ROM`+`Bus`+
-  `CPU6502` directly (no `System`/`TerminalIO` needed), script a command
-  string through repeated `tty.receive()` calls interleaved with
-  `cpu.executeInstruction()`, and assert the captured output stream
-  matches the expected transcript for a peek, a poke followed by a peek
-  confirming the write, a list, and a run of a tiny test program.
+### End-to-end monitor firmware tests
+
+`test/system/monitor_firmware_test.cpp`, same shape as
+`cpu6502_fibonacci_e2e_test.cpp`: construct `RAM`+`TTY`+`ROM`+`Bus`+
+`CPU6502` directly (no `System`/`TerminalIO` needed — these tests never
+touch the real terminal), script a command string through repeated
+`tty.receive()` calls interleaved with `cpu.executeInstruction()`, and
+assert on the captured output stream. A shared test helper
+(`typeLine(cpu, tty, "A000 R")`-style) that feeds one byte at a time and
+pumps the CPU between each keeps the individual test bodies readable —
+this is what makes these genuinely end-to-end rather than a single
+scripted blob: each byte crosses the same peripheral boundary a real
+keystroke would.
+
+This is the part of the system a human actually talks to, so it gets the
+most test weight. Each of these is its own test case, not a shared
+mega-scenario, so a failure points at exactly what broke:
+
+- **Cold start**: booting the firmware (via `cpu.reset()`) prints the
+  banner followed by the first `"> "` prompt, with nothing typed yet.
+- **Echo**: every typed character of a command line appears in the
+  output before that command's own output does — raw mode means the OS
+  never does this, so it's entirely on the firmware, and easy to
+  silently drop.
+- **Peek**: preload a known byte via `loadProgram()`, type its address,
+  assert the `AAAA: BB` line.
+- **Poke then peek**: type a poke command, then a peek at the same
+  address in the same session, asserting the poked value round-trips —
+  proves the write actually landed in `RAM` (not just consumed off the
+  input) rather than trusting the poke's own (nonexistent) echo of
+  success.
+- **List spanning multiple rows**: a range wider than 16 bytes, so the
+  row-wrapping and per-row address prefix are both exercised, not just
+  the single-row case.
+- **Run via RTS**: poke a tiny program (e.g. increments a known RAM
+  byte, then `RTS`) via the poke command, `R` it, then peek the RAM
+  byte in the same session to confirm it executed, and confirm the
+  prompt is usable again afterward.
+- **Run via BRK (warm-start safety net)**: poke a tiny program that
+  executes `BRK` instead of `RTS`, `R` it, and assert the transcript
+  shows the *warm*-start prompt (no banner) rather than the system
+  wedging — this is the one test that actually exercises the BRK-vector
+  design decision end-to-end, not just "BRK doesn't crash."
+- **Backspace**: type a wrong hex digit, backspace it, type the correct
+  one, and assert both the visual erase sequence (`\b \b`) and the
+  command's final effect reflect the *corrected* input, not the typo.
+- **Malformed input recovery**: a garbage line gets a `?` and a fresh
+  prompt, and — critically — a valid command typed right after still
+  works, proving the bad line didn't leave stale state in the firmware's
+  line buffer or parser.
+- **Multi-command session**: one continuous transcript chaining several
+  different commands back-to-back (poke, peek, list, run, another peek)
+  in a single test, closer to how a person would actually drive it —
+  catches state leaking between commands that isolated single-command
+  tests each starting from a fresh `cpu.reset()` would miss.
+- **Address edge cases**: a short address (1–2 hex digits, zero-extended
+  to 16 bits) and an address at the top of the space (`$FFFF`) both
+  parse and dispatch correctly.
