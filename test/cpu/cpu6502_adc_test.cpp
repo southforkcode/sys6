@@ -311,3 +311,79 @@ TEST_F(CPU6502AdcTest, SixteenTicksCompleteAdcZeroPageXWithAUnchangedUntilFinalC
 
     EXPECT_EQ(cpu.A(), 0x15);
 }
+
+TEST_F(CPU6502AdcTest, AdcAbsoluteXAddsOperandWithoutPageCrossing) {
+    ram.write(0x0000, 0x7D);
+    ram.write(0x0001, 0x00);
+    ram.write(0x0002, 0x02); // base address 0x0200
+    ram.write(0x0205, 0x05); // effective address 0x0200 + X(0x05)
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.X(0x05);
+    cpu.CFlag(false);
+
+    cpu.executeInstruction();
+
+    EXPECT_EQ(cpu.A(), 0x15);
+    EXPECT_EQ(cpu.PC(), 0x0003);
+}
+
+TEST_F(CPU6502AdcTest, AdcAbsoluteXAddsOperandAcrossPageCrossing) {
+    ram.write(0x0000, 0x7D);
+    ram.write(0x0001, 0xFF);
+    ram.write(0x0002, 0x02); // base address 0x02FF
+    ram.write(0x0304, 0x05); // effective address 0x02FF + X(0x05) crosses into page 0x03
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.X(0x05);
+    cpu.CFlag(false);
+
+    cpu.executeInstruction();
+
+    EXPECT_EQ(cpu.A(), 0x15);
+}
+
+TEST_F(CPU6502AdcTest, SixteenTicksCompleteAdcAbsoluteXWithoutPageCrossing) {
+    ram.write(0x0000, 0x7D);
+    ram.write(0x0001, 0x00);
+    ram.write(0x0002, 0x02);
+    ram.write(0x0205, 0x05);
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.X(0x05);
+
+    for (int i = 0; i < 12; ++i) {
+        cpu.tick();
+    }
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T3 completes the instruction: no page crossing
+
+    EXPECT_EQ(cpu.A(), 0x15);
+}
+
+TEST_F(CPU6502AdcTest, TwentyTicksCompleteAdcAbsoluteXWithPageCrossing) {
+    ram.write(0x0000, 0x7D);
+    ram.write(0x0001, 0xFF);
+    ram.write(0x0002, 0x02);
+    ram.write(0x0304, 0x05);
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.X(0x05);
+
+    for (int i = 0; i < 16; ++i) {
+        cpu.tick();
+    }
+    // T0-T3 complete: T3 was the idle page-crossing fixup cycle, A unchanged
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T4 completes the instruction
+
+    EXPECT_EQ(cpu.A(), 0x15);
+}
