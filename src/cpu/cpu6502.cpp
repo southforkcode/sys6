@@ -141,9 +141,16 @@ void CPU6502::onClockHigh() {
         return;
     }
 
-    // ADC opcodes don't split into capture/commit halves yet -- see Task 2
-    // of the clock-phase-model plan. Their work still runs entirely from
-    // onClockLow() below.
+    switch (m_IR) {
+    case cOpADCImmediate:
+        captureADCImmediate();
+        break;
+    case cOpADCAbsolute:
+        captureADCAbsolute();
+        break;
+    default:
+        break; // unimplemented opcode: nothing to capture
+    }
 }
 
 void CPU6502::onClockLow() {
@@ -154,10 +161,10 @@ void CPU6502::onClockLow() {
 
     switch (m_IR) {
     case cOpADCImmediate:
-        tickADCImmediate();
+        commitADCImmediate();
         break;
     case cOpADCAbsolute:
-        tickADCAbsolute();
+        commitADCAbsolute();
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
@@ -181,14 +188,13 @@ void CPU6502::commitOpcodeFetch() {
     m_cpuStep = CpuStep::T1;
 }
 
-void CPU6502::tickAlu() { m_aluOutput = m_alu.adc(m_aluA, m_aluB, m_aluCarryIn); }
-
-void CPU6502::applyAdc(uint8_t operand) {
+void CPU6502::loadAluInputs(uint8_t operand) {
     m_aluA = m_A;
     m_aluB = operand;
     m_aluCarryIn = CFlag();
-    tickAlu();
+}
 
+void CPU6502::commitAluResult() {
     A(m_aluOutput.value);
     CFlag(m_aluOutput.carry);
     ZFlag(m_aluOutput.zero);
@@ -196,34 +202,47 @@ void CPU6502::applyAdc(uint8_t operand) {
     NFlag(m_aluOutput.negative);
 }
 
-void CPU6502::tickADCImmediate() {
-    uint8_t operand = m_bus.read(m_PC);
+void CPU6502::captureADCImmediate() { loadAluInputs(m_bus.read(m_PC)); }
+
+void CPU6502::commitADCImmediate() {
     m_PC++;
-    applyAdc(operand);
+    commitAluResult();
     m_cpuStep = CpuStep::T0;
 }
 
-void CPU6502::tickADCAbsolute() {
+void CPU6502::captureADCAbsolute() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2:
+        m_addrLatch |= static_cast<uint16_t>(m_bus.read(m_PC)) << 8;
+        break;
+    case CpuStep::T3:
+        loadAluInputs(m_bus.read(m_addrLatch));
+        break;
+    default:
+        // Unreachable: this handler is only invoked while m_cpuStep is T1, T2, or T3.
+        break;
+    }
+}
+
+void CPU6502::commitADCAbsolute() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
         m_PC++;
         m_cpuStep = CpuStep::T2;
         break;
     case CpuStep::T2:
-        m_addrLatch |= static_cast<uint16_t>(m_bus.read(m_PC)) << 8;
         m_PC++;
         m_cpuStep = CpuStep::T3;
         break;
-    case CpuStep::T3: {
-        uint8_t operand = m_bus.read(m_addrLatch);
-        applyAdc(operand);
+    case CpuStep::T3:
+        commitAluResult();
         m_cpuStep = CpuStep::T0;
         break;
-    }
     default:
         // Unreachable: this handler is only invoked while m_cpuStep is T1, T2, or T3.
-        m_cpuStep = CpuStep::T0;
         break;
     }
 }

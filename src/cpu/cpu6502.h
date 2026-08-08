@@ -85,8 +85,10 @@ private:
     void onClockLow();
     void captureOpcodeFetch();
     void commitOpcodeFetch();
-    void tickAlu();
-    void applyAdc(uint8_t operand);
-    void tickADCImmediate();
-    void tickADCAbsolute();
+    void loadAluInputs(uint8_t operand);
+    void commitAluResult();
+    void captureADCImmediate();
+    void commitADCImmediate();
+    void captureADCAbsolute();
+    void commitADCAbsolute();
 };

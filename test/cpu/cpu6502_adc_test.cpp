@@ -101,6 +101,31 @@ TEST_F(CPU6502AdcTest, EightTicksCompleteAdcImmediate) {
     EXPECT_EQ(cpu.PC(), 0x0002);
 }
 
+TEST_F(CPU6502AdcTest, AdcImmediateDoesNotUpdateAUntilFinalPhaseOfLastCycle) {
+    ram.write(0x0000, 0x69);
+    ram.write(0x0001, 0x05);
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.CFlag(false);
+
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T0 complete
+
+    cpu.tick(); // T1 phase 1/4: Low -> LowToHigh
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick(); // T1 phase 2/4: capture operand + ALU inputs on arrival at High
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick(); // T1 phase 3/4: High -> HighToLow, ALU settles
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick(); // T1 phase 4/4: commit -- A and flags updated
+    EXPECT_EQ(cpu.A(), 0x15);
+}
+
 TEST_F(CPU6502AdcTest, AdcAbsoluteAddsOperandFromMemory) {
     ram.write(0x0000, 0x6D);
     ram.write(0x0001, 0x00); // address low byte
@@ -163,5 +188,40 @@ TEST_F(CPU6502AdcTest, SixteenTicksCompleteAdcAbsoluteWithAUnchangedUntilFinalCy
     cpu.tick();
     cpu.tick(); // T3: read operand from memory, apply ALU
 
+    EXPECT_EQ(cpu.A(), 0x15);
+}
+
+TEST_F(CPU6502AdcTest, AdcAbsoluteDoesNotUpdateAUntilFinalPhaseOfLastCycle) {
+    ram.write(0x0000, 0x6D);
+    ram.write(0x0001, 0x00);
+    ram.write(0x0002, 0x02);
+    ram.write(0x0200, 0x05);
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.CFlag(false);
+
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T0 complete
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T1 complete
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T2 complete
+
+    cpu.tick(); // T3 phase 1/4
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick(); // T3 phase 2/4: read operand from memory, load ALU inputs
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick(); // T3 phase 3/4: ALU settles
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick(); // T3 phase 4/4: commit -- A and flags updated
     EXPECT_EQ(cpu.A(), 0x15);
 }
