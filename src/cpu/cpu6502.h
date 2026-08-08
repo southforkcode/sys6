@@ -4,6 +4,7 @@
 #include "cpu.h"
 
 #include <bitset>
+#include <cstddef>
 #include <cstdint>
 
 class Bus;
@@ -70,6 +71,12 @@ public:
     void VFlag(bool val);
     void NFlag(bool val);
 
+    //--------------------------------------
+    // Halt / run control
+
+    bool halted() const;
+    bool run(size_t maxInstructions);
+
 protected:
     Bus &m_bus;
     uint8_t m_A;   // accumulator register
@@ -87,6 +94,7 @@ protected:
     uint8_t m_IR = 0;
     int8_t m_branchOffset = 0;
     bool m_branchTaken = false;
+    bool m_halted = false;
 
     // The ALU is a combinational unit: it has no state of its own, but real
     // hardware wires its inputs and output through latches rather than
@@ -176,4 +184,11 @@ private:
     // same way applyBinaryAluOp() decides its operation from m_IR.
     void captureBranch();
     void commitBranch();
+
+    // BRK (full interrupt semantics): pushes PC+2 and P (with B forced to
+    // 1) onto the stack, sets the I flag, and loads PC from cBRKVector.
+    // m_halted is the actual "catch a BRK" mechanism a driver uses to stop
+    // issuing further instructions -- see run().
+    void captureBRK();
+    void commitBRK();
 };

@@ -10,6 +10,8 @@ const uint16_t cNMIVector = 0xfffa;
 const uint16_t cResetVector = 0xfffc;
 const uint16_t cBRKVector = 0xfffe;
 
+const uint8_t cOpBRK = 0x00;
+
 const uint8_t cOpADCImmediate = 0x69;
 const uint8_t cOpADCAbsolute = 0x6D;
 const uint8_t cOpADCZeroPage = 0x65;
@@ -157,6 +159,15 @@ void CPU6502::PC(uint16_t val) { m_PC = val; }
 
 void CPU6502::SP(uint8_t val) { m_SP = val; }
 
+bool CPU6502::halted() const { return m_halted; }
+
+bool CPU6502::run(size_t maxInstructions) {
+    for (size_t i = 0; i < maxInstructions && !m_halted; ++i) {
+        executeInstruction();
+    }
+    return m_halted;
+}
+
 uint8_t CPU6502::P() const { return m_pFlags.to_ulong() & 0xff; }
 
 void CPU6502::P(uint8_t val) { m_pFlags = val; }
@@ -190,6 +201,7 @@ bool CPU6502::NFlag() const { return m_pFlags.test(cNFlagOffset); }
 void CPU6502::NFlag(bool val) { m_pFlags.set(cNFlagOffset, val); }
 
 void CPU6502::reset() {
+    m_halted = false;
     A(0);
     X(0);
     Y(0);
@@ -424,6 +436,9 @@ void CPU6502::onClockHigh() {
     case cOpBEQ:
         captureBranch();
         break;
+    case cOpBRK:
+        captureBRK();
+        break;
     default:
         break; // unimplemented opcode: nothing to capture
     }
@@ -571,6 +586,9 @@ void CPU6502::onClockLow() {
     case cOpBNE:
     case cOpBEQ:
         commitBranch();
+        break;
+    case cOpBRK:
+        commitBRK();
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
@@ -1618,5 +1636,61 @@ void CPU6502::commitBranch() {
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T3.
+    }
+}
+
+void CPU6502::captureBRK() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        static_cast<void>(m_bus.read(m_PC)); // dummy read: padding byte after BRK, discarded
+        break;
+    case CpuStep::T2:
+    case CpuStep::T3:
+    case CpuStep::T4:
+        break; // idle: the pushes happen in commit, where m_SP is authoritative
+    case CpuStep::T5:
+        m_addrLatch = m_bus.read(cBRKVector);
+        break;
+    case CpuStep::T6:
+        m_addrLatch |= static_cast<uint16_t>(m_bus.read(static_cast<uint16_t>(cBRKVector + 1))) << 8;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T6.
+    }
+}
+
+void CPU6502::commitBRK() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_bus.write(static_cast<uint16_t>(0x0100 + m_SP), static_cast<uint8_t>(m_PC >> 8));
+        m_SP--;
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_bus.write(static_cast<uint16_t>(0x0100 + m_SP), static_cast<uint8_t>(m_PC & 0xFF));
+        m_SP--;
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        BFlag(true);
+        m_bus.write(static_cast<uint16_t>(0x0100 + m_SP), P());
+        m_SP--;
+        IFlag(true);
+        m_cpuStep = CpuStep::T5;
+        break;
+    case CpuStep::T5:
+        m_cpuStep = CpuStep::T6;
+        break;
+    case CpuStep::T6:
+        m_PC = m_addrLatch;
+        m_halted = true;
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T6.
     }
 }
