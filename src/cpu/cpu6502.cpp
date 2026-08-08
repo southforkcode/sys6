@@ -19,6 +19,98 @@ const uint8_t cOpADCAbsoluteY = 0x79;
 const uint8_t cOpADCIndirectX = 0x61;
 const uint8_t cOpADCIndirectY = 0x71;
 
+const uint8_t cOpSBCImmediate = 0xE9;
+const uint8_t cOpSBCZeroPage = 0xE5;
+const uint8_t cOpSBCZeroPageX = 0xF5;
+const uint8_t cOpSBCAbsolute = 0xED;
+const uint8_t cOpSBCAbsoluteX = 0xFD;
+const uint8_t cOpSBCAbsoluteY = 0xF9;
+const uint8_t cOpSBCIndirectX = 0xE1;
+const uint8_t cOpSBCIndirectY = 0xF1;
+
+const uint8_t cOpANDImmediate = 0x29;
+const uint8_t cOpANDZeroPage = 0x25;
+const uint8_t cOpANDZeroPageX = 0x35;
+const uint8_t cOpANDAbsolute = 0x2D;
+const uint8_t cOpANDAbsoluteX = 0x3D;
+const uint8_t cOpANDAbsoluteY = 0x39;
+const uint8_t cOpANDIndirectX = 0x21;
+const uint8_t cOpANDIndirectY = 0x31;
+
+const uint8_t cOpORAImmediate = 0x09;
+const uint8_t cOpORAZeroPage = 0x05;
+const uint8_t cOpORAZeroPageX = 0x15;
+const uint8_t cOpORAAbsolute = 0x0D;
+const uint8_t cOpORAAbsoluteX = 0x1D;
+const uint8_t cOpORAAbsoluteY = 0x19;
+const uint8_t cOpORAIndirectX = 0x01;
+const uint8_t cOpORAIndirectY = 0x11;
+
+const uint8_t cOpEORImmediate = 0x49;
+const uint8_t cOpEORZeroPage = 0x45;
+const uint8_t cOpEORZeroPageX = 0x55;
+const uint8_t cOpEORAbsolute = 0x4D;
+const uint8_t cOpEORAbsoluteX = 0x5D;
+const uint8_t cOpEORAbsoluteY = 0x59;
+const uint8_t cOpEORIndirectX = 0x41;
+const uint8_t cOpEORIndirectY = 0x51;
+
+const uint8_t cOpCMPImmediate = 0xC9;
+const uint8_t cOpCMPZeroPage = 0xC5;
+const uint8_t cOpCMPZeroPageX = 0xD5;
+const uint8_t cOpCMPAbsolute = 0xCD;
+const uint8_t cOpCMPAbsoluteX = 0xDD;
+const uint8_t cOpCMPAbsoluteY = 0xD9;
+const uint8_t cOpCMPIndirectX = 0xC1;
+const uint8_t cOpCMPIndirectY = 0xD1;
+
+const uint8_t cOpCPXImmediate = 0xE0;
+const uint8_t cOpCPXZeroPage = 0xE4;
+const uint8_t cOpCPXAbsolute = 0xEC;
+
+const uint8_t cOpCPYImmediate = 0xC0;
+const uint8_t cOpCPYZeroPage = 0xC4;
+const uint8_t cOpCPYAbsolute = 0xCC;
+
+const uint8_t cOpASLAccumulator = 0x0A;
+const uint8_t cOpASLZeroPage = 0x06;
+const uint8_t cOpASLZeroPageX = 0x16;
+const uint8_t cOpASLAbsolute = 0x0E;
+const uint8_t cOpASLAbsoluteX = 0x1E;
+
+const uint8_t cOpLSRAccumulator = 0x4A;
+const uint8_t cOpLSRZeroPage = 0x46;
+const uint8_t cOpLSRZeroPageX = 0x56;
+const uint8_t cOpLSRAbsolute = 0x4E;
+const uint8_t cOpLSRAbsoluteX = 0x5E;
+
+const uint8_t cOpROLAccumulator = 0x2A;
+const uint8_t cOpROLZeroPage = 0x26;
+const uint8_t cOpROLZeroPageX = 0x36;
+const uint8_t cOpROLAbsolute = 0x2E;
+const uint8_t cOpROLAbsoluteX = 0x3E;
+
+const uint8_t cOpRORAccumulator = 0x6A;
+const uint8_t cOpRORZeroPage = 0x66;
+const uint8_t cOpRORZeroPageX = 0x76;
+const uint8_t cOpRORAbsolute = 0x6E;
+const uint8_t cOpRORAbsoluteX = 0x7E;
+
+const uint8_t cOpINCZeroPage = 0xE6;
+const uint8_t cOpINCZeroPageX = 0xF6;
+const uint8_t cOpINCAbsolute = 0xEE;
+const uint8_t cOpINCAbsoluteX = 0xFE;
+
+const uint8_t cOpDECZeroPage = 0xC6;
+const uint8_t cOpDECZeroPageX = 0xD6;
+const uint8_t cOpDECAbsolute = 0xCE;
+const uint8_t cOpDECAbsoluteX = 0xDE;
+
+const uint8_t cOpINX = 0xE8;
+const uint8_t cOpDEX = 0xCA;
+const uint8_t cOpINY = 0xC8;
+const uint8_t cOpDEY = 0x88;
+
 const auto cCFlagOffset = 0;
 const auto cZFlagOffset = 1;
 const auto cIFlagOffset = 2;
@@ -124,8 +216,46 @@ ClockPhase nextClockPhase(ClockPhase phase) {
 void CPU6502::tick() {
     // The ALU is always-on combinational logic: it recomputes from whatever
     // is currently in its input latches on every tick, whether or not the
-    // executing opcode is using the result this cycle.
-    m_aluOutput = m_alu.adc(m_aluA, m_aluB, m_aluCarryIn);
+    // executing opcode is using the result this cycle. m_aluOp is the
+    // function-select line choosing which operation that recompute performs.
+    switch (m_aluOp) {
+    case AluOp::ADC:
+        m_aluOutput = m_alu.adc(m_aluA, m_aluB, m_aluCarryIn);
+        break;
+    case AluOp::SBC:
+        m_aluOutput = m_alu.sbc(m_aluA, m_aluB, m_aluCarryIn);
+        break;
+    case AluOp::AND:
+        m_aluOutput = m_alu.bitwiseAnd(m_aluA, m_aluB);
+        break;
+    case AluOp::ORA:
+        m_aluOutput = m_alu.bitwiseOr(m_aluA, m_aluB);
+        break;
+    case AluOp::EOR:
+        m_aluOutput = m_alu.bitwiseXor(m_aluA, m_aluB);
+        break;
+    case AluOp::CMP:
+        m_aluOutput = m_alu.cmp(m_aluA, m_aluB);
+        break;
+    case AluOp::ASL:
+        m_aluOutput = m_alu.asl(m_aluB);
+        break;
+    case AluOp::LSR:
+        m_aluOutput = m_alu.lsr(m_aluB);
+        break;
+    case AluOp::ROL:
+        m_aluOutput = m_alu.rol(m_aluB, m_aluCarryIn);
+        break;
+    case AluOp::ROR:
+        m_aluOutput = m_alu.ror(m_aluB, m_aluCarryIn);
+        break;
+    case AluOp::INC:
+        m_aluOutput = m_alu.increment(m_aluB);
+        break;
+    case AluOp::DEC:
+        m_aluOutput = m_alu.decrement(m_aluB);
+        break;
+    }
 
     m_clockPhase = nextClockPhase(m_clockPhase);
 
@@ -155,28 +285,118 @@ void CPU6502::onClockHigh() {
 
     switch (m_IR) {
     case cOpADCImmediate:
-        captureADCImmediate();
+    case cOpSBCImmediate:
+    case cOpANDImmediate:
+    case cOpORAImmediate:
+    case cOpEORImmediate:
+    case cOpCMPImmediate:
+    case cOpCPXImmediate:
+    case cOpCPYImmediate:
+        captureReadImmediate();
         break;
     case cOpADCAbsolute:
-        captureADCAbsolute();
+    case cOpSBCAbsolute:
+    case cOpANDAbsolute:
+    case cOpORAAbsolute:
+    case cOpEORAbsolute:
+    case cOpCMPAbsolute:
+    case cOpCPXAbsolute:
+    case cOpCPYAbsolute:
+        captureReadAbsolute();
         break;
     case cOpADCZeroPage:
-        captureADCZeroPage();
+    case cOpSBCZeroPage:
+    case cOpANDZeroPage:
+    case cOpORAZeroPage:
+    case cOpEORZeroPage:
+    case cOpCMPZeroPage:
+    case cOpCPXZeroPage:
+    case cOpCPYZeroPage:
+        captureReadZeroPage();
         break;
     case cOpADCZeroPageX:
-        captureADCZeroPageX();
+    case cOpSBCZeroPageX:
+    case cOpANDZeroPageX:
+    case cOpORAZeroPageX:
+    case cOpEORZeroPageX:
+    case cOpCMPZeroPageX:
+        captureReadZeroPageX();
         break;
     case cOpADCAbsoluteX:
-        captureADCAbsoluteX();
+    case cOpSBCAbsoluteX:
+    case cOpANDAbsoluteX:
+    case cOpORAAbsoluteX:
+    case cOpEORAbsoluteX:
+    case cOpCMPAbsoluteX:
+        captureReadAbsoluteX();
         break;
     case cOpADCAbsoluteY:
-        captureADCAbsoluteY();
+    case cOpSBCAbsoluteY:
+    case cOpANDAbsoluteY:
+    case cOpORAAbsoluteY:
+    case cOpEORAbsoluteY:
+    case cOpCMPAbsoluteY:
+        captureReadAbsoluteY();
         break;
     case cOpADCIndirectX:
-        captureADCIndirectX();
+    case cOpSBCIndirectX:
+    case cOpANDIndirectX:
+    case cOpORAIndirectX:
+    case cOpEORIndirectX:
+    case cOpCMPIndirectX:
+        captureReadIndirectX();
         break;
     case cOpADCIndirectY:
-        captureADCIndirectY();
+    case cOpSBCIndirectY:
+    case cOpANDIndirectY:
+    case cOpORAIndirectY:
+    case cOpEORIndirectY:
+    case cOpCMPIndirectY:
+        captureReadIndirectY();
+        break;
+    case cOpASLAccumulator:
+    case cOpLSRAccumulator:
+    case cOpROLAccumulator:
+    case cOpRORAccumulator:
+        captureShiftAccumulator();
+        break;
+    case cOpASLZeroPage:
+    case cOpLSRZeroPage:
+    case cOpROLZeroPage:
+    case cOpRORZeroPage:
+    case cOpINCZeroPage:
+    case cOpDECZeroPage:
+        captureRmwZeroPage();
+        break;
+    case cOpASLZeroPageX:
+    case cOpLSRZeroPageX:
+    case cOpROLZeroPageX:
+    case cOpRORZeroPageX:
+    case cOpINCZeroPageX:
+    case cOpDECZeroPageX:
+        captureRmwZeroPageX();
+        break;
+    case cOpASLAbsolute:
+    case cOpLSRAbsolute:
+    case cOpROLAbsolute:
+    case cOpRORAbsolute:
+    case cOpINCAbsolute:
+    case cOpDECAbsolute:
+        captureRmwAbsolute();
+        break;
+    case cOpASLAbsoluteX:
+    case cOpLSRAbsoluteX:
+    case cOpROLAbsoluteX:
+    case cOpRORAbsoluteX:
+    case cOpINCAbsoluteX:
+    case cOpDECAbsoluteX:
+        captureRmwAbsoluteX();
+        break;
+    case cOpINX:
+    case cOpDEX:
+    case cOpINY:
+    case cOpDEY:
+        captureImpliedIncDec();
         break;
     default:
         break; // unimplemented opcode: nothing to capture
@@ -191,28 +411,118 @@ void CPU6502::onClockLow() {
 
     switch (m_IR) {
     case cOpADCImmediate:
-        commitADCImmediate();
+    case cOpSBCImmediate:
+    case cOpANDImmediate:
+    case cOpORAImmediate:
+    case cOpEORImmediate:
+    case cOpCMPImmediate:
+    case cOpCPXImmediate:
+    case cOpCPYImmediate:
+        commitReadImmediate();
         break;
     case cOpADCAbsolute:
-        commitADCAbsolute();
+    case cOpSBCAbsolute:
+    case cOpANDAbsolute:
+    case cOpORAAbsolute:
+    case cOpEORAbsolute:
+    case cOpCMPAbsolute:
+    case cOpCPXAbsolute:
+    case cOpCPYAbsolute:
+        commitReadAbsolute();
         break;
     case cOpADCZeroPage:
-        commitADCZeroPage();
+    case cOpSBCZeroPage:
+    case cOpANDZeroPage:
+    case cOpORAZeroPage:
+    case cOpEORZeroPage:
+    case cOpCMPZeroPage:
+    case cOpCPXZeroPage:
+    case cOpCPYZeroPage:
+        commitReadZeroPage();
         break;
     case cOpADCZeroPageX:
-        commitADCZeroPageX();
+    case cOpSBCZeroPageX:
+    case cOpANDZeroPageX:
+    case cOpORAZeroPageX:
+    case cOpEORZeroPageX:
+    case cOpCMPZeroPageX:
+        commitReadZeroPageX();
         break;
     case cOpADCAbsoluteX:
-        commitADCAbsoluteX();
+    case cOpSBCAbsoluteX:
+    case cOpANDAbsoluteX:
+    case cOpORAAbsoluteX:
+    case cOpEORAbsoluteX:
+    case cOpCMPAbsoluteX:
+        commitReadAbsoluteX();
         break;
     case cOpADCAbsoluteY:
-        commitADCAbsoluteY();
+    case cOpSBCAbsoluteY:
+    case cOpANDAbsoluteY:
+    case cOpORAAbsoluteY:
+    case cOpEORAbsoluteY:
+    case cOpCMPAbsoluteY:
+        commitReadAbsoluteY();
         break;
     case cOpADCIndirectX:
-        commitADCIndirectX();
+    case cOpSBCIndirectX:
+    case cOpANDIndirectX:
+    case cOpORAIndirectX:
+    case cOpEORIndirectX:
+    case cOpCMPIndirectX:
+        commitReadIndirectX();
         break;
     case cOpADCIndirectY:
-        commitADCIndirectY();
+    case cOpSBCIndirectY:
+    case cOpANDIndirectY:
+    case cOpORAIndirectY:
+    case cOpEORIndirectY:
+    case cOpCMPIndirectY:
+        commitReadIndirectY();
+        break;
+    case cOpASLAccumulator:
+    case cOpLSRAccumulator:
+    case cOpROLAccumulator:
+    case cOpRORAccumulator:
+        commitShiftAccumulator();
+        break;
+    case cOpASLZeroPage:
+    case cOpLSRZeroPage:
+    case cOpROLZeroPage:
+    case cOpRORZeroPage:
+    case cOpINCZeroPage:
+    case cOpDECZeroPage:
+        commitRmwZeroPage();
+        break;
+    case cOpASLZeroPageX:
+    case cOpLSRZeroPageX:
+    case cOpROLZeroPageX:
+    case cOpRORZeroPageX:
+    case cOpINCZeroPageX:
+    case cOpDECZeroPageX:
+        commitRmwZeroPageX();
+        break;
+    case cOpASLAbsolute:
+    case cOpLSRAbsolute:
+    case cOpROLAbsolute:
+    case cOpRORAbsolute:
+    case cOpINCAbsolute:
+    case cOpDECAbsolute:
+        commitRmwAbsolute();
+        break;
+    case cOpASLAbsoluteX:
+    case cOpLSRAbsoluteX:
+    case cOpROLAbsoluteX:
+    case cOpRORAbsoluteX:
+    case cOpINCAbsoluteX:
+    case cOpDECAbsoluteX:
+        commitRmwAbsoluteX();
+        break;
+    case cOpINX:
+    case cOpDEX:
+    case cOpINY:
+    case cOpDEY:
+        commitImpliedIncDec();
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
@@ -242,29 +552,178 @@ void CPU6502::commitOpcodeFetch() {
     m_cpuStep = CpuStep::T1;
 }
 
-void CPU6502::loadAluInputs(uint8_t operand) {
-    m_aluA = m_A;
+void CPU6502::beginBinaryAluOp(AluOp aluOp, uint8_t regValue, uint8_t operand) {
+    m_aluOp = aluOp;
+    m_aluA = regValue;
     m_aluB = operand;
     m_aluCarryIn = CFlag();
 }
 
-void CPU6502::commitAluResult() {
-    A(m_aluOutput.value);
-    CFlag(m_aluOutput.carry);
-    ZFlag(m_aluOutput.zero);
-    VFlag(m_aluOutput.overflow);
-    NFlag(m_aluOutput.negative);
+void CPU6502::applyBinaryAluOp(uint8_t operand) {
+    switch (m_IR) {
+    case cOpADCImmediate:
+    case cOpADCZeroPage:
+    case cOpADCZeroPageX:
+    case cOpADCAbsolute:
+    case cOpADCAbsoluteX:
+    case cOpADCAbsoluteY:
+    case cOpADCIndirectX:
+    case cOpADCIndirectY:
+        beginBinaryAluOp(AluOp::ADC, m_A, operand);
+        break;
+    case cOpSBCImmediate:
+    case cOpSBCZeroPage:
+    case cOpSBCZeroPageX:
+    case cOpSBCAbsolute:
+    case cOpSBCAbsoluteX:
+    case cOpSBCAbsoluteY:
+    case cOpSBCIndirectX:
+    case cOpSBCIndirectY:
+        beginBinaryAluOp(AluOp::SBC, m_A, operand);
+        break;
+    case cOpANDImmediate:
+    case cOpANDZeroPage:
+    case cOpANDZeroPageX:
+    case cOpANDAbsolute:
+    case cOpANDAbsoluteX:
+    case cOpANDAbsoluteY:
+    case cOpANDIndirectX:
+    case cOpANDIndirectY:
+        beginBinaryAluOp(AluOp::AND, m_A, operand);
+        break;
+    case cOpORAImmediate:
+    case cOpORAZeroPage:
+    case cOpORAZeroPageX:
+    case cOpORAAbsolute:
+    case cOpORAAbsoluteX:
+    case cOpORAAbsoluteY:
+    case cOpORAIndirectX:
+    case cOpORAIndirectY:
+        beginBinaryAluOp(AluOp::ORA, m_A, operand);
+        break;
+    case cOpEORImmediate:
+    case cOpEORZeroPage:
+    case cOpEORZeroPageX:
+    case cOpEORAbsolute:
+    case cOpEORAbsoluteX:
+    case cOpEORAbsoluteY:
+    case cOpEORIndirectX:
+    case cOpEORIndirectY:
+        beginBinaryAluOp(AluOp::EOR, m_A, operand);
+        break;
+    case cOpCMPImmediate:
+    case cOpCMPZeroPage:
+    case cOpCMPZeroPageX:
+    case cOpCMPAbsolute:
+    case cOpCMPAbsoluteX:
+    case cOpCMPAbsoluteY:
+    case cOpCMPIndirectX:
+    case cOpCMPIndirectY:
+        beginBinaryAluOp(AluOp::CMP, m_A, operand);
+        break;
+    case cOpCPXImmediate:
+    case cOpCPXZeroPage:
+    case cOpCPXAbsolute:
+        beginBinaryAluOp(AluOp::CMP, m_X, operand);
+        break;
+    case cOpCPYImmediate:
+    case cOpCPYZeroPage:
+    case cOpCPYAbsolute:
+        beginBinaryAluOp(AluOp::CMP, m_Y, operand);
+        break;
+    default:
+        break; // Unreachable: only called for opcodes routed through the binary-ALU family.
+    }
 }
 
-void CPU6502::captureADCImmediate() { loadAluInputs(m_bus.read(m_PC)); }
+void CPU6502::commitBinaryAluResult() {
+    switch (m_IR) {
+    case cOpADCImmediate:
+    case cOpADCZeroPage:
+    case cOpADCZeroPageX:
+    case cOpADCAbsolute:
+    case cOpADCAbsoluteX:
+    case cOpADCAbsoluteY:
+    case cOpADCIndirectX:
+    case cOpADCIndirectY:
+    case cOpSBCImmediate:
+    case cOpSBCZeroPage:
+    case cOpSBCZeroPageX:
+    case cOpSBCAbsolute:
+    case cOpSBCAbsoluteX:
+    case cOpSBCAbsoluteY:
+    case cOpSBCIndirectX:
+    case cOpSBCIndirectY:
+        // ADC/SBC: write A; C, Z, V, N all follow the arithmetic result.
+        A(m_aluOutput.value);
+        CFlag(m_aluOutput.carry);
+        ZFlag(m_aluOutput.zero);
+        VFlag(m_aluOutput.overflow);
+        NFlag(m_aluOutput.negative);
+        break;
+    case cOpANDImmediate:
+    case cOpANDZeroPage:
+    case cOpANDZeroPageX:
+    case cOpANDAbsolute:
+    case cOpANDAbsoluteX:
+    case cOpANDAbsoluteY:
+    case cOpANDIndirectX:
+    case cOpANDIndirectY:
+    case cOpORAImmediate:
+    case cOpORAZeroPage:
+    case cOpORAZeroPageX:
+    case cOpORAAbsolute:
+    case cOpORAAbsoluteX:
+    case cOpORAAbsoluteY:
+    case cOpORAIndirectX:
+    case cOpORAIndirectY:
+    case cOpEORImmediate:
+    case cOpEORZeroPage:
+    case cOpEORZeroPageX:
+    case cOpEORAbsolute:
+    case cOpEORAbsoluteX:
+    case cOpEORAbsoluteY:
+    case cOpEORIndirectX:
+    case cOpEORIndirectY:
+        // AND/ORA/EOR: write A; only Z, N follow. C and V are real 6502
+        // behavior left untouched by logical ops, not an oversight.
+        A(m_aluOutput.value);
+        ZFlag(m_aluOutput.zero);
+        NFlag(m_aluOutput.negative);
+        break;
+    case cOpCMPImmediate:
+    case cOpCMPZeroPage:
+    case cOpCMPZeroPageX:
+    case cOpCMPAbsolute:
+    case cOpCMPAbsoluteX:
+    case cOpCMPAbsoluteY:
+    case cOpCMPIndirectX:
+    case cOpCMPIndirectY:
+    case cOpCPXImmediate:
+    case cOpCPXZeroPage:
+    case cOpCPXAbsolute:
+    case cOpCPYImmediate:
+    case cOpCPYZeroPage:
+    case cOpCPYAbsolute:
+        // CMP/CPX/CPY: write nothing back; only C, Z, N follow.
+        CFlag(m_aluOutput.carry);
+        ZFlag(m_aluOutput.zero);
+        NFlag(m_aluOutput.negative);
+        break;
+    default:
+        break; // Unreachable: only called for opcodes routed through the binary-ALU family.
+    }
+}
 
-void CPU6502::commitADCImmediate() {
+void CPU6502::captureReadImmediate() { applyBinaryAluOp(m_bus.read(m_PC)); }
+
+void CPU6502::commitReadImmediate() {
     m_PC++;
-    commitAluResult();
+    commitBinaryAluResult();
     m_cpuStep = CpuStep::T0;
 }
 
-void CPU6502::captureADCAbsolute() {
+void CPU6502::captureReadAbsolute() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_addrLatch = m_bus.read(m_PC);
@@ -273,7 +732,7 @@ void CPU6502::captureADCAbsolute() {
         m_addrLatch |= static_cast<uint16_t>(m_bus.read(m_PC)) << 8;
         break;
     case CpuStep::T3:
-        loadAluInputs(m_bus.read(m_addrLatch));
+        applyBinaryAluOp(m_bus.read(m_addrLatch));
         break;
     default:
         // Unreachable: this handler is only invoked while m_cpuStep is T1, T2, or T3.
@@ -281,7 +740,7 @@ void CPU6502::captureADCAbsolute() {
     }
 }
 
-void CPU6502::commitADCAbsolute() {
+void CPU6502::commitReadAbsolute() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_PC++;
@@ -292,7 +751,7 @@ void CPU6502::commitADCAbsolute() {
         m_cpuStep = CpuStep::T3;
         break;
     case CpuStep::T3:
-        commitAluResult();
+        commitBinaryAluResult();
         m_cpuStep = CpuStep::T0;
         break;
     default:
@@ -301,27 +760,27 @@ void CPU6502::commitADCAbsolute() {
     }
 }
 
-void CPU6502::captureADCZeroPage() {
+void CPU6502::captureReadZeroPage() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_addrLatch = m_bus.read(m_PC);
         break;
     case CpuStep::T2:
-        loadAluInputs(m_bus.read(m_addrLatch));
+        applyBinaryAluOp(m_bus.read(m_addrLatch));
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1 or T2.
     }
 }
 
-void CPU6502::commitADCZeroPage() {
+void CPU6502::commitReadZeroPage() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_PC++;
         m_cpuStep = CpuStep::T2;
         break;
     case CpuStep::T2:
-        commitAluResult();
+        commitBinaryAluResult();
         m_cpuStep = CpuStep::T0;
         break;
     default:
@@ -329,7 +788,7 @@ void CPU6502::commitADCZeroPage() {
     }
 }
 
-void CPU6502::captureADCZeroPageX() {
+void CPU6502::captureReadZeroPageX() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_addrLatch = m_bus.read(m_PC);
@@ -338,14 +797,14 @@ void CPU6502::captureADCZeroPageX() {
         m_addrLatch = (m_addrLatch + m_X) & 0xFF;
         break;
     case CpuStep::T3:
-        loadAluInputs(m_bus.read(m_addrLatch));
+        applyBinaryAluOp(m_bus.read(m_addrLatch));
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1, T2, or T3.
     }
 }
 
-void CPU6502::commitADCZeroPageX() {
+void CPU6502::commitReadZeroPageX() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_PC++;
@@ -355,7 +814,7 @@ void CPU6502::commitADCZeroPageX() {
         m_cpuStep = CpuStep::T3;
         break;
     case CpuStep::T3:
-        commitAluResult();
+        commitBinaryAluResult();
         m_cpuStep = CpuStep::T0;
         break;
     default:
@@ -363,7 +822,7 @@ void CPU6502::commitADCZeroPageX() {
     }
 }
 
-void CPU6502::captureADCAbsoluteX() {
+void CPU6502::captureReadAbsoluteX() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_addrLatch = m_bus.read(m_PC);
@@ -377,18 +836,18 @@ void CPU6502::captureADCAbsoluteX() {
     }
     case CpuStep::T3:
         if (!m_pageCrossed) {
-            loadAluInputs(m_bus.read(m_effAddr));
+            applyBinaryAluOp(m_bus.read(m_effAddr));
         }
         break;
     case CpuStep::T4:
-        loadAluInputs(m_bus.read(m_effAddr));
+        applyBinaryAluOp(m_bus.read(m_effAddr));
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T4.
     }
 }
 
-void CPU6502::commitADCAbsoluteX() {
+void CPU6502::commitReadAbsoluteX() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_PC++;
@@ -402,12 +861,12 @@ void CPU6502::commitADCAbsoluteX() {
         if (m_pageCrossed) {
             m_cpuStep = CpuStep::T4;
         } else {
-            commitAluResult();
+            commitBinaryAluResult();
             m_cpuStep = CpuStep::T0;
         }
         break;
     case CpuStep::T4:
-        commitAluResult();
+        commitBinaryAluResult();
         m_cpuStep = CpuStep::T0;
         break;
     default:
@@ -415,7 +874,7 @@ void CPU6502::commitADCAbsoluteX() {
     }
 }
 
-void CPU6502::captureADCAbsoluteY() {
+void CPU6502::captureReadAbsoluteY() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_addrLatch = m_bus.read(m_PC);
@@ -429,18 +888,18 @@ void CPU6502::captureADCAbsoluteY() {
     }
     case CpuStep::T3:
         if (!m_pageCrossed) {
-            loadAluInputs(m_bus.read(m_effAddr));
+            applyBinaryAluOp(m_bus.read(m_effAddr));
         }
         break;
     case CpuStep::T4:
-        loadAluInputs(m_bus.read(m_effAddr));
+        applyBinaryAluOp(m_bus.read(m_effAddr));
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T4.
     }
 }
 
-void CPU6502::commitADCAbsoluteY() {
+void CPU6502::commitReadAbsoluteY() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_PC++;
@@ -454,12 +913,12 @@ void CPU6502::commitADCAbsoluteY() {
         if (m_pageCrossed) {
             m_cpuStep = CpuStep::T4;
         } else {
-            commitAluResult();
+            commitBinaryAluResult();
             m_cpuStep = CpuStep::T0;
         }
         break;
     case CpuStep::T4:
-        commitAluResult();
+        commitBinaryAluResult();
         m_cpuStep = CpuStep::T0;
         break;
     default:
@@ -467,7 +926,7 @@ void CPU6502::commitADCAbsoluteY() {
     }
 }
 
-void CPU6502::captureADCIndirectX() {
+void CPU6502::captureReadIndirectX() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_addrLatch = m_bus.read(m_PC);
@@ -482,14 +941,14 @@ void CPU6502::captureADCIndirectX() {
         m_effAddr |= static_cast<uint16_t>(m_bus.read((m_addrLatch + 1) & 0xFF)) << 8;
         break;
     case CpuStep::T5:
-        loadAluInputs(m_bus.read(m_effAddr));
+        applyBinaryAluOp(m_bus.read(m_effAddr));
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
     }
 }
 
-void CPU6502::commitADCIndirectX() {
+void CPU6502::commitReadIndirectX() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_PC++;
@@ -505,7 +964,7 @@ void CPU6502::commitADCIndirectX() {
         m_cpuStep = CpuStep::T5;
         break;
     case CpuStep::T5:
-        commitAluResult();
+        commitBinaryAluResult();
         m_cpuStep = CpuStep::T0;
         break;
     default:
@@ -513,7 +972,7 @@ void CPU6502::commitADCIndirectX() {
     }
 }
 
-void CPU6502::captureADCIndirectY() {
+void CPU6502::captureReadIndirectY() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_addrLatch = m_bus.read(m_PC);
@@ -531,18 +990,18 @@ void CPU6502::captureADCIndirectY() {
     }
     case CpuStep::T4:
         if (!m_pageCrossed) {
-            loadAluInputs(m_bus.read(m_effAddr));
+            applyBinaryAluOp(m_bus.read(m_effAddr));
         }
         break;
     case CpuStep::T5:
-        loadAluInputs(m_bus.read(m_effAddr));
+        applyBinaryAluOp(m_bus.read(m_effAddr));
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
     }
 }
 
-void CPU6502::commitADCIndirectY() {
+void CPU6502::commitReadIndirectY() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_PC++;
@@ -558,15 +1017,341 @@ void CPU6502::commitADCIndirectY() {
         if (m_pageCrossed) {
             m_cpuStep = CpuStep::T5;
         } else {
-            commitAluResult();
+            commitBinaryAluResult();
             m_cpuStep = CpuStep::T0;
         }
         break;
     case CpuStep::T5:
-        commitAluResult();
+        commitBinaryAluResult();
         m_cpuStep = CpuStep::T0;
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
     }
+}
+
+void CPU6502::beginUnaryAluOp(AluOp aluOp, uint8_t value) {
+    m_aluOp = aluOp;
+    m_aluB = value;
+    m_aluCarryIn = CFlag();
+}
+
+void CPU6502::applyUnaryAluOp(uint8_t value) {
+    switch (m_IR) {
+    case cOpASLAccumulator:
+    case cOpASLZeroPage:
+    case cOpASLZeroPageX:
+    case cOpASLAbsolute:
+    case cOpASLAbsoluteX:
+        beginUnaryAluOp(AluOp::ASL, value);
+        break;
+    case cOpLSRAccumulator:
+    case cOpLSRZeroPage:
+    case cOpLSRZeroPageX:
+    case cOpLSRAbsolute:
+    case cOpLSRAbsoluteX:
+        beginUnaryAluOp(AluOp::LSR, value);
+        break;
+    case cOpROLAccumulator:
+    case cOpROLZeroPage:
+    case cOpROLZeroPageX:
+    case cOpROLAbsolute:
+    case cOpROLAbsoluteX:
+        beginUnaryAluOp(AluOp::ROL, value);
+        break;
+    case cOpRORAccumulator:
+    case cOpRORZeroPage:
+    case cOpRORZeroPageX:
+    case cOpRORAbsolute:
+    case cOpRORAbsoluteX:
+        beginUnaryAluOp(AluOp::ROR, value);
+        break;
+    case cOpINCZeroPage:
+    case cOpINCZeroPageX:
+    case cOpINCAbsolute:
+    case cOpINCAbsoluteX:
+        beginUnaryAluOp(AluOp::INC, value);
+        break;
+    case cOpDECZeroPage:
+    case cOpDECZeroPageX:
+    case cOpDECAbsolute:
+    case cOpDECAbsoluteX:
+        beginUnaryAluOp(AluOp::DEC, value);
+        break;
+    default:
+        break; // Unreachable: only called for opcodes routed through the unary-ALU family.
+    }
+}
+
+void CPU6502::commitUnaryAluFlags() {
+    switch (m_IR) {
+    case cOpASLAccumulator:
+    case cOpASLZeroPage:
+    case cOpASLZeroPageX:
+    case cOpASLAbsolute:
+    case cOpASLAbsoluteX:
+    case cOpLSRAccumulator:
+    case cOpLSRZeroPage:
+    case cOpLSRZeroPageX:
+    case cOpLSRAbsolute:
+    case cOpLSRAbsoluteX:
+    case cOpROLAccumulator:
+    case cOpROLZeroPage:
+    case cOpROLZeroPageX:
+    case cOpROLAbsolute:
+    case cOpROLAbsoluteX:
+    case cOpRORAccumulator:
+    case cOpRORZeroPage:
+    case cOpRORZeroPageX:
+    case cOpRORAbsolute:
+    case cOpRORAbsoluteX:
+        // ASL/LSR/ROL/ROR: C, Z, N follow the shift result. V untouched.
+        CFlag(m_aluOutput.carry);
+        ZFlag(m_aluOutput.zero);
+        NFlag(m_aluOutput.negative);
+        break;
+    case cOpINCZeroPage:
+    case cOpINCZeroPageX:
+    case cOpINCAbsolute:
+    case cOpINCAbsoluteX:
+    case cOpDECZeroPage:
+    case cOpDECZeroPageX:
+    case cOpDECAbsolute:
+    case cOpDECAbsoluteX:
+        // INC/DEC: only Z, N follow. C and V are real 6502 behavior left
+        // untouched, not an oversight.
+        ZFlag(m_aluOutput.zero);
+        NFlag(m_aluOutput.negative);
+        break;
+    default:
+        break; // Unreachable: only called for opcodes routed through the unary-ALU family.
+    }
+}
+
+void CPU6502::captureShiftAccumulator() { applyUnaryAluOp(m_A); }
+
+void CPU6502::commitShiftAccumulator() {
+    A(m_aluOutput.value);
+    commitUnaryAluFlags();
+    m_cpuStep = CpuStep::T0;
+}
+
+void CPU6502::captureRmwZeroPage() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2:
+        applyUnaryAluOp(m_bus.read(m_addrLatch));
+        break;
+    case CpuStep::T3:
+    case CpuStep::T4:
+        break; // idle: stand-in for the dummy write-back; the ALU result is already available combinationally
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T4.
+    }
+}
+
+void CPU6502::commitRmwZeroPage() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        m_bus.write(m_addrLatch, m_aluOutput.value);
+        commitUnaryAluFlags();
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T4.
+    }
+}
+
+void CPU6502::captureRmwZeroPageX() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2:
+        m_addrLatch = (m_addrLatch + m_X) & 0xFF;
+        break;
+    case CpuStep::T3:
+        applyUnaryAluOp(m_bus.read(m_addrLatch));
+        break;
+    case CpuStep::T4:
+    case CpuStep::T5:
+        break; // idle: stand-in for the dummy write-back; the ALU result is already available combinationally
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::commitRmwZeroPageX() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        m_cpuStep = CpuStep::T5;
+        break;
+    case CpuStep::T5:
+        m_bus.write(m_addrLatch, m_aluOutput.value);
+        commitUnaryAluFlags();
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::captureRmwAbsolute() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2:
+        m_addrLatch |= static_cast<uint16_t>(m_bus.read(m_PC)) << 8;
+        break;
+    case CpuStep::T3:
+        applyUnaryAluOp(m_bus.read(m_addrLatch));
+        break;
+    case CpuStep::T4:
+    case CpuStep::T5:
+        break; // idle: stand-in for the dummy write-back; the ALU result is already available combinationally
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::commitRmwAbsolute() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_PC++;
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        m_cpuStep = CpuStep::T5;
+        break;
+    case CpuStep::T5:
+        m_bus.write(m_addrLatch, m_aluOutput.value);
+        commitUnaryAluFlags();
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::captureRmwAbsoluteX() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2: {
+        auto base = static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
+        // RMW absolute,X timing is fixed at 7 cycles on real hardware, so
+        // .pageCrossed is deliberately not consulted here (unlike the
+        // read-only family) -- see captureReadAbsoluteX for the contrast.
+        EffectiveAddress resolved = indexedAddress(base, m_X);
+        m_effAddr = resolved.address;
+        break;
+    }
+    case CpuStep::T3:
+        break; // idle: stand-in for the real hardware's wrong-address read before the index fixup
+    case CpuStep::T4:
+        applyUnaryAluOp(m_bus.read(m_effAddr));
+        break;
+    case CpuStep::T5:
+    case CpuStep::T6:
+        break; // idle: stand-in for the dummy write-back; the ALU result is already available combinationally
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T6.
+    }
+}
+
+void CPU6502::commitRmwAbsoluteX() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_PC++;
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        m_cpuStep = CpuStep::T5;
+        break;
+    case CpuStep::T5:
+        m_cpuStep = CpuStep::T6;
+        break;
+    case CpuStep::T6:
+        m_bus.write(m_effAddr, m_aluOutput.value);
+        commitUnaryAluFlags();
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T6.
+    }
+}
+
+void CPU6502::captureImpliedIncDec() {
+    switch (m_IR) {
+    case cOpINX:
+        beginUnaryAluOp(AluOp::INC, m_X);
+        break;
+    case cOpDEX:
+        beginUnaryAluOp(AluOp::DEC, m_X);
+        break;
+    case cOpINY:
+        beginUnaryAluOp(AluOp::INC, m_Y);
+        break;
+    case cOpDEY:
+        beginUnaryAluOp(AluOp::DEC, m_Y);
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked for INX/DEX/INY/DEY.
+    }
+}
+
+void CPU6502::commitImpliedIncDec() {
+    switch (m_IR) {
+    case cOpINX:
+    case cOpDEX:
+        X(m_aluOutput.value);
+        break;
+    case cOpINY:
+    case cOpDEY:
+        Y(m_aluOutput.value);
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked for INX/DEX/INY/DEY.
+    }
+    ZFlag(m_aluOutput.zero);
+    NFlag(m_aluOutput.negative);
+    m_cpuStep = CpuStep::T0;
 }

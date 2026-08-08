@@ -8,8 +8,9 @@
 
 class Bus;
 
-enum class CpuStep : uint8_t { T0, T1, T2, T3, T4, T5 };
+enum class CpuStep : uint8_t { T0, T1, T2, T3, T4, T5, T6 };
 enum class ClockPhase : uint8_t { Low, LowToHigh, High, HighToLow };
+enum class AluOp : uint8_t { ADC, SBC, AND, ORA, EOR, CMP, ASL, LSR, ROL, ROR, INC, DEC };
 
 struct EffectiveAddress {
     uint16_t address;
@@ -90,6 +91,7 @@ protected:
     // passing them as ephemeral call arguments. These members are that
     // wiring, made explicit.
     ALU m_alu;
+    AluOp m_aluOp = AluOp::ADC;
     uint8_t m_aluA = 0;
     uint8_t m_aluB = 0;
     bool m_aluCarryIn = false;
@@ -102,22 +104,51 @@ private:
     void onClockLow();
     void captureOpcodeFetch();
     void commitOpcodeFetch();
-    void loadAluInputs(uint8_t operand);
-    void commitAluResult();
-    void captureADCImmediate();
-    void commitADCImmediate();
-    void captureADCAbsolute();
-    void commitADCAbsolute();
-    void captureADCZeroPage();
-    void commitADCZeroPage();
-    void captureADCZeroPageX();
-    void commitADCZeroPageX();
-    void captureADCAbsoluteX();
-    void commitADCAbsoluteX();
-    void captureADCAbsoluteY();
-    void commitADCAbsoluteY();
-    void captureADCIndirectX();
-    void commitADCIndirectX();
-    void captureADCIndirectY();
-    void commitADCIndirectY();
+
+    // Binary-ALU family (ADC/SBC/AND/ORA/EOR/CMP/CPX/CPY): one capture/commit
+    // pair per addressing-mode shape, shared by every opcode that uses it.
+    // applyBinaryAluOp()/commitBinaryAluResult() switch on m_IR to decide
+    // which ALU operation, source register, and flag subset apply.
+    void beginBinaryAluOp(AluOp aluOp, uint8_t regValue, uint8_t operand);
+    void applyBinaryAluOp(uint8_t operand);
+    void commitBinaryAluResult();
+    void captureReadImmediate();
+    void commitReadImmediate();
+    void captureReadZeroPage();
+    void commitReadZeroPage();
+    void captureReadZeroPageX();
+    void commitReadZeroPageX();
+    void captureReadAbsolute();
+    void commitReadAbsolute();
+    void captureReadAbsoluteX();
+    void commitReadAbsoluteX();
+    void captureReadAbsoluteY();
+    void commitReadAbsoluteY();
+    void captureReadIndirectX();
+    void commitReadIndirectX();
+    void captureReadIndirectY();
+    void commitReadIndirectY();
+
+    // Unary-ALU family (ASL/LSR/ROL/ROR/INC/DEC): reads a value, transforms
+    // it, writes it back -- to A for shift/rotate Accumulator mode, to
+    // memory for every other mode. applyUnaryAluOp()/commitUnaryAluFlags()
+    // switch on m_IR to decide the operation and flag subset.
+    void beginUnaryAluOp(AluOp aluOp, uint8_t value);
+    void applyUnaryAluOp(uint8_t value);
+    void commitUnaryAluFlags();
+    void captureShiftAccumulator();
+    void commitShiftAccumulator();
+    void captureRmwZeroPage();
+    void commitRmwZeroPage();
+    void captureRmwZeroPageX();
+    void commitRmwZeroPageX();
+    void captureRmwAbsolute();
+    void commitRmwAbsolute();
+    void captureRmwAbsoluteX();
+    void commitRmwAbsoluteX();
+
+    // Implied-register family (INX/DEX/INY/DEY): 2 cycles, no bus access
+    // beyond the opcode fetch, operates directly on X or Y.
+    void captureImpliedIncDec();
+    void commitImpliedIncDec();
 };
