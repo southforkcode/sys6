@@ -15,6 +15,7 @@ const uint8_t cOpADCAbsolute = 0x6D;
 const uint8_t cOpADCZeroPage = 0x65;
 const uint8_t cOpADCZeroPageX = 0x75;
 const uint8_t cOpADCAbsoluteX = 0x7D;
+const uint8_t cOpADCAbsoluteY = 0x79;
 
 const auto cCFlagOffset = 0;
 const auto cZFlagOffset = 1;
@@ -166,6 +167,9 @@ void CPU6502::onClockHigh() {
     case cOpADCAbsoluteX:
         captureADCAbsoluteX();
         break;
+    case cOpADCAbsoluteY:
+        captureADCAbsoluteY();
+        break;
     default:
         break; // unimplemented opcode: nothing to capture
     }
@@ -192,6 +196,9 @@ void CPU6502::onClockLow() {
         break;
     case cOpADCAbsoluteX:
         commitADCAbsoluteX();
+        break;
+    case cOpADCAbsoluteY:
+        commitADCAbsoluteY();
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
@@ -368,6 +375,58 @@ void CPU6502::captureADCAbsoluteX() {
 }
 
 void CPU6502::commitADCAbsoluteX() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_PC++;
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        if (m_pageCrossed) {
+            m_cpuStep = CpuStep::T4;
+        } else {
+            commitAluResult();
+            m_cpuStep = CpuStep::T0;
+        }
+        break;
+    case CpuStep::T4:
+        commitAluResult();
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T4.
+    }
+}
+
+void CPU6502::captureADCAbsoluteY() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2: {
+        auto base = static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
+        EffectiveAddress resolved = indexedAddress(base, m_Y);
+        m_effAddr = resolved.address;
+        m_pageCrossed = resolved.pageCrossed;
+        break;
+    }
+    case CpuStep::T3:
+        if (!m_pageCrossed) {
+            loadAluInputs(m_bus.read(m_effAddr));
+        }
+        break;
+    case CpuStep::T4:
+        loadAluInputs(m_bus.read(m_effAddr));
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T4.
+    }
+}
+
+void CPU6502::commitADCAbsoluteY() {
     switch (m_cpuStep) {
     case CpuStep::T1:
         m_PC++;

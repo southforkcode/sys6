@@ -114,4 +114,6 @@ private:
     void commitADCZeroPageX();
     void captureADCAbsoluteX();
     void commitADCAbsoluteX();
+    void captureADCAbsoluteY();
+    void commitADCAbsoluteY();
 };
