@@ -18,6 +18,13 @@ struct EffectiveAddress {
     bool pageCrossed;
 };
 
+// CPU6502 is the frozen, cycle-accurate reference implementation of the
+// MOS 6502 ISA (CpuId::Mos6502). It is the golden model a future
+// wider-bus, CISC-like CPU variant will be verified against. Changes to
+// this class should be limited to verified bug fixes in its existing
+// 6502 behavior -- never modified to make room for a new variant. New
+// variants implement the CPU interface in their own class/files with
+// their own CpuId enumerator.
 class CPU6502 : public CPU {
 public:
     explicit CPU6502(Bus &bus);
