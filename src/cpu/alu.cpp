@@ -2,7 +2,7 @@
 
 AluResult ALU::adc(uint8_t acc, uint8_t operand, bool carryIn) const {
     int sum = static_cast<int>(acc) + static_cast<int>(operand) + (carryIn ? 1 : 0);
-    uint8_t value = static_cast<uint8_t>(sum & 0xFF);
+    auto value = static_cast<uint8_t>(sum & 0xFF);
 
     AluResult result;
     result.value = value;
