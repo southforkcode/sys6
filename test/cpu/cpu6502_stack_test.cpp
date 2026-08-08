@@ -197,6 +197,11 @@ TEST_F(CPU6502StackTest, PhpThenPlpRoundTripsStatusRegister) {
     cpu.ZFlag(false);
     cpu.IFlag(true);
     cpu.DFlag(false);
+    // PHP always forces B to 1 in the byte it pushes (no physical B
+    // flip-flop -- see commitImpliedPush()), so a lossless round trip
+    // requires starting with B already set; otherwise PLP would restore a
+    // B bit that PHP's own push unconditionally overwrote.
+    cpu.BFlag(true);
     cpu.VFlag(true);
     cpu.NFlag(false);
     uint8_t startingP = cpu.P();

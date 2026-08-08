@@ -222,17 +222,16 @@ bool CPU6502::NFlag() const { return m_pFlags.test(cNFlagOffset); }
 
 void CPU6502::NFlag(bool val) { m_pFlags.set(cNFlagOffset, val); }
 
+void CPU6502::beginReset() {
+    m_resetActive = true;
+    m_cpuStep = CpuStep::T0;
+}
+
 void CPU6502::reset() {
-    m_halted = false;
-    A(0);
-    X(0);
-    Y(0);
-    PC(0);
-    SP(0xff);
-    IFlag(true);
-    DFlag(false);
-    BFlag(true);
-    m_pFlags.set(5, true);
+    beginReset();
+    do {
+        tick();
+    } while (m_cpuStep != CpuStep::T0 || m_clockPhase != ClockPhase::Low);
 }
 
 void CPU6502::executeInstruction() {
@@ -316,6 +315,11 @@ void CPU6502::runToClockHigh() {
 }
 
 void CPU6502::onClockHigh() {
+    if (m_resetActive) {
+        captureReset();
+        return;
+    }
+
     if (m_cpuStep == CpuStep::T0) {
         captureOpcodeFetch();
         return;
@@ -498,6 +502,11 @@ void CPU6502::onClockHigh() {
 }
 
 void CPU6502::onClockLow() {
+    if (m_resetActive) {
+        commitReset();
+        return;
+    }
+
     if (m_cpuStep == CpuStep::T0) {
         commitOpcodeFetch();
         return;
@@ -2046,5 +2055,62 @@ void CPU6502::commitImpliedPull() {
     }
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T3.
+    }
+}
+
+void CPU6502::captureReset() {
+    switch (m_cpuStep) {
+    case CpuStep::T0:
+    case CpuStep::T1:
+        static_cast<void>(m_bus.read(m_PC)); // dummy read: real hardware fetches and discards
+        break;
+    case CpuStep::T2:
+    case CpuStep::T3:
+    case CpuStep::T4:
+        break; // idle: the phantom stack decrements happen in commit, where m_SP is authoritative
+    case CpuStep::T5:
+        m_addrLatch = m_bus.read(cResetVector);
+        break;
+    case CpuStep::T6:
+        m_addrLatch |= static_cast<uint16_t>(m_bus.read(static_cast<uint16_t>(cResetVector + 1)))
+                       << 8;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T0-T6.
+    }
+}
+
+void CPU6502::commitReset() {
+    switch (m_cpuStep) {
+    case CpuStep::T0:
+        m_halted = false;
+        m_cpuStep = CpuStep::T1;
+        break;
+    case CpuStep::T1:
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_SP--; // phantom push #1: decrement only, real hardware suppresses the write
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_SP--; // phantom push #2
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        m_SP--; // phantom push #3
+        IFlag(true);
+        m_cpuStep = CpuStep::T5;
+        break;
+    case CpuStep::T5:
+        m_cpuStep = CpuStep::T6;
+        break;
+    case CpuStep::T6:
+        m_PC = m_addrLatch;
+        m_resetActive = false;
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T0-T6.
     }
 }

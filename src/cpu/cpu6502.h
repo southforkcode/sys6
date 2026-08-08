@@ -23,6 +23,15 @@ public:
     explicit CPU6502(Bus &bus);
 
     void reset() override;
+
+    // Arms the reset sequence (m_resetActive = true, m_cpuStep = T0)
+    // without pumping it to completion -- for a driver that wants to
+    // observe/trace the 7 T-state reset sequence one tick() at a time.
+    // reset() is the convenience wrapper most callers should use instead:
+    // it calls this and then pumps via tick() until the sequence
+    // completes, so the CPU is fully settled by the time reset() returns.
+    void beginReset();
+
     void executeInstruction() override;
     void tick();
 
@@ -79,11 +88,11 @@ public:
 
 protected:
     Bus &m_bus;
-    uint8_t m_A;   // accumulator register
-    uint8_t m_X;   // index register X
-    uint8_t m_Y;   // index register Y
-    uint16_t m_PC; // program counter
-    uint8_t m_SP;  // stack pointer
+    uint8_t m_A = 0;   // accumulator register
+    uint8_t m_X = 0;   // index register X
+    uint8_t m_Y = 0;   // index register Y
+    uint16_t m_PC = 0; // program counter
+    uint8_t m_SP = 0;  // stack pointer
     std::bitset<8> m_pFlags;
 
     CpuStep m_cpuStep = CpuStep::T0;
@@ -95,6 +104,7 @@ protected:
     int8_t m_branchOffset = 0;
     bool m_branchTaken = false;
     bool m_halted = false;
+    bool m_resetActive = false;
 
     // The ALU is a combinational unit: it has no state of its own, but real
     // hardware wires its inputs and output through latches rather than
@@ -117,6 +127,14 @@ private:
     void onClockLow();
     void captureOpcodeFetch();
     void commitOpcodeFetch();
+
+    // Reset sequence: models real 6502 RESET as 7 T-states (T0-T6) -- 2
+    // dummy reads, 3 phantom stack decrements (no writes; real hardware
+    // suppresses them), then a 2-cycle read of cResetVector. m_resetActive
+    // routes onClockHigh()/onClockLow() here ahead of the normal
+    // T0-opcode-fetch/m_IR dispatch.
+    void captureReset();
+    void commitReset();
 
     // Binary-ALU family (ADC/SBC/AND/ORA/EOR/CMP/CPX/CPY): one capture/commit
     // pair per addressing-mode shape, shared by every opcode that uses it.

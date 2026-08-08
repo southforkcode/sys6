@@ -15,17 +15,84 @@ protected:
 
 TEST(CPU6502Smoke, GTestWiringWorks) { EXPECT_TRUE(true); }
 
-TEST_F(CPU6502Test, ResetSetsRegistersAndFlagsToPowerOnState) {
+TEST_F(CPU6502Test, ColdResetLoadsPCFromVectorAndLandsSPOnFD) {
+    ram.write(0xFFFC, 0x34);
+    ram.write(0xFFFD, 0x12);
+
     cpu.reset();
 
+    // A freshly constructed CPU (not yet reset) default-initializes A/X/Y/D
+    // to 0/0/0/false, so these read as "power-on defaults", not because
+    // reset() force-clears them -- see WarmResetPreservesAXYAndDFlag below,
+    // which proves reset() genuinely leaves them alone.
     EXPECT_EQ(cpu.A(), 0);
     EXPECT_EQ(cpu.X(), 0);
     EXPECT_EQ(cpu.Y(), 0);
-    EXPECT_EQ(cpu.PC(), 0);
-    EXPECT_EQ(cpu.SP(), 0xFF);
+    EXPECT_EQ(cpu.PC(), 0x1234);
+    EXPECT_EQ(cpu.SP(), 0xFD); // 0x00 - 3, wrapping
     EXPECT_TRUE(cpu.IFlag());
     EXPECT_FALSE(cpu.DFlag());
-    EXPECT_TRUE(cpu.BFlag());
+    EXPECT_FALSE(cpu.halted());
+}
+
+TEST_F(CPU6502Test, WarmResetPreservesAXYAndDFlagAndDecrementsSPByThree) {
+    ram.write(0xFFFC, 0x00);
+    ram.write(0xFFFD, 0x90);
+    cpu.reset();
+    cpu.A(0x11);
+    cpu.X(0x22);
+    cpu.Y(0x33);
+    cpu.DFlag(true);
+    cpu.SP(0x80);
+
+    cpu.reset();
+
+    EXPECT_EQ(cpu.A(), 0x11);
+    EXPECT_EQ(cpu.X(), 0x22);
+    EXPECT_EQ(cpu.Y(), 0x33);
+    EXPECT_TRUE(cpu.DFlag());
+    EXPECT_EQ(cpu.SP(), 0x7D); // 0x80 - 3
+}
+
+TEST_F(CPU6502Test, ResetDecrementsSPWithPageWraparound) {
+    ram.write(0xFFFC, 0x00);
+    ram.write(0xFFFD, 0x90);
+    cpu.reset();
+    cpu.SP(0x01);
+
+    cpu.reset();
+
+    EXPECT_EQ(cpu.SP(), 0xFE); // 0x01 - 3, wraps within page 1
+}
+
+TEST_F(CPU6502Test, ResetDoesNotForceBFlagOrBit5) {
+    ram.write(0xFFFC, 0x00);
+    ram.write(0xFFFD, 0x90);
+    cpu.reset();
+    cpu.P(0x00); // clear everything, including B and bit 5
+
+    cpu.reset();
+
+    EXPECT_FALSE(cpu.BFlag());
+    EXPECT_EQ(cpu.P() & 0x20, 0);
+}
+
+TEST_F(CPU6502Test, SevenTStatesCompleteResetWhenDrivenManually) {
+    ram.write(0xFFFC, 0x34);
+    ram.write(0xFFFD, 0x12);
+    cpu.PC(0x5555);
+    cpu.SP(0x80);
+
+    cpu.beginReset();
+    for (int step = 0; step < 7; ++step) {
+        for (int i = 0; i < 4; ++i) {
+            cpu.tick();
+        }
+    }
+
+    EXPECT_EQ(cpu.PC(), 0x1234);
+    EXPECT_EQ(cpu.SP(), 0x7D); // 0x80 - 3
+    EXPECT_FALSE(cpu.halted());
 }
 
 TEST_F(CPU6502Test, ARoundTripsBoundaryValues) {
