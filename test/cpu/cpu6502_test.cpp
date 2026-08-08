@@ -168,12 +168,32 @@ TEST_F(CPU6502Test, ExecuteInstructionReadsFromCurrentPC) {
     EXPECT_EQ(cpu.PC(), 0x1235);
 }
 
-TEST_F(CPU6502Test, TickPerformsOpcodeFetchOnFirstCall) {
+TEST_F(CPU6502Test, FourTicksCompleteOpcodeFetch) {
     ram.write(0x0000, 0x42);
     cpu.reset();
 
     cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
 
+    EXPECT_EQ(cpu.PC(), 0x0001);
+}
+
+TEST_F(CPU6502Test, TickDoesNotAdvancePCDuringIntermediateClockPhases) {
+    ram.write(0x0000, 0x42);
+    cpu.reset();
+
+    cpu.tick(); // Low -> LowToHigh: settling, no commit
+    EXPECT_EQ(cpu.PC(), 0x0000);
+
+    cpu.tick(); // LowToHigh -> High: capture opcode into m_IR, PC not yet touched
+    EXPECT_EQ(cpu.PC(), 0x0000);
+
+    cpu.tick(); // High -> HighToLow: settling, no commit
+    EXPECT_EQ(cpu.PC(), 0x0000);
+
+    cpu.tick(); // HighToLow -> Low: commit -- PC++, CpuStep advances to T1
     EXPECT_EQ(cpu.PC(), 0x0001);
 }
 
@@ -182,12 +202,22 @@ TEST_F(CPU6502Test, TickCompletesUnimplementedOpcodeAsOneCycleNoOp) {
     ram.write(0x0001, 0x99);
     cpu.reset();
 
-    cpu.tick(); // cycle 0 of first instruction: fetch 0x42, PC -> 1
-    cpu.tick(); // cycle 1 of first instruction: unimplemented, no-op, completes
+    cpu.tick(); // T0 phase 1/4: Low -> LowToHigh
+    cpu.tick(); // T0 phase 2/4: LowToHigh -> High, capture opcode 0x42
+    cpu.tick(); // T0 phase 3/4: High -> HighToLow
+    cpu.tick(); // T0 phase 4/4: HighToLow -> Low, commit: PC -> 1, CpuStep -> T1
+
+    cpu.tick(); // T1 phase 1/4
+    cpu.tick(); // T1 phase 2/4: unimplemented opcode, no capture work
+    cpu.tick(); // T1 phase 3/4
+    cpu.tick(); // T1 phase 4/4: commit: CpuStep -> T0, instruction complete
 
     EXPECT_EQ(cpu.PC(), 0x0001);
 
-    cpu.tick(); // cycle 0 of second instruction: fetch 0x99, PC -> 2
+    cpu.tick(); // next instruction, T0 phase 1/4
+    cpu.tick(); // T0 phase 2/4: capture opcode 0x99
+    cpu.tick(); // T0 phase 3/4
+    cpu.tick(); // T0 phase 4/4: commit: PC -> 2
 
     EXPECT_EQ(cpu.PC(), 0x0002);
 }

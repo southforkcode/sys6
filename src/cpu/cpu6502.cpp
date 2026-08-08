@@ -90,25 +90,65 @@ void CPU6502::reset() {
 }
 
 void CPU6502::executeInstruction() {
+    // m_cpuStep == T0 is ambiguous on its own: it's true both before the
+    // instruction starts and once it completes. m_clockPhase == Low
+    // disambiguates -- that combination only recurs once the final commit
+    // of the instruction's last T-state has actually run.
     do {
         tick();
-    } while (m_cpuStep != CpuStep::T0);
+    } while (m_cpuStep != CpuStep::T0 || m_clockPhase != ClockPhase::Low);
 }
 
+namespace {
+ClockPhase nextClockPhase(ClockPhase phase) {
+    switch (phase) {
+    case ClockPhase::Low:
+        return ClockPhase::LowToHigh;
+    case ClockPhase::LowToHigh:
+        return ClockPhase::High;
+    case ClockPhase::High:
+        return ClockPhase::HighToLow;
+    case ClockPhase::HighToLow:
+        return ClockPhase::Low;
+    }
+    return ClockPhase::Low; // unreachable: all enumerators handled above
+}
+} // namespace
+
 void CPU6502::tick() {
+    // The ALU is always-on combinational logic: it recomputes from whatever
+    // is currently in its input latches on every tick, whether or not the
+    // executing opcode is using the result this cycle.
+    m_aluOutput = m_alu.adc(m_aluA, m_aluB, m_aluCarryIn);
+
+    m_clockPhase = nextClockPhase(m_clockPhase);
+
+    switch (m_clockPhase) {
+    case ClockPhase::High:
+        onClockHigh();
+        break;
+    case ClockPhase::Low:
+        onClockLow();
+        break;
+    default:
+        break; // LowToHigh / HighToLow: settling only, no commits.
+    }
+}
+
+void CPU6502::onClockHigh() {
     if (m_cpuStep == CpuStep::T0) {
-        uint8_t opcode = m_bus.read(m_PC);
-        m_IR = opcode;
-        m_PC++;
+        captureOpcodeFetch();
+        return;
+    }
 
-        if (m_tracing && m_logger) {
-            std::ostringstream oss;
-            oss << "Fetched opcode 0x" << std::hex << std::uppercase << static_cast<int>(opcode)
-                << " at PC 0x" << (m_PC - 1);
-            m_logger->trace(oss.str());
-        }
+    // ADC opcodes don't split into capture/commit halves yet -- see Task 2
+    // of the clock-phase-model plan. Their work still runs entirely from
+    // onClockLow() below.
+}
 
-        m_cpuStep = CpuStep::T1;
+void CPU6502::onClockLow() {
+    if (m_cpuStep == CpuStep::T0) {
+        commitOpcodeFetch();
         return;
     }
 
@@ -124,6 +164,21 @@ void CPU6502::tick() {
         m_cpuStep = CpuStep::T0;
         break;
     }
+}
+
+void CPU6502::captureOpcodeFetch() { m_IR = m_bus.read(m_PC); }
+
+void CPU6502::commitOpcodeFetch() {
+    m_PC++;
+
+    if (m_tracing && m_logger) {
+        std::ostringstream oss;
+        oss << "Fetched opcode 0x" << std::hex << std::uppercase << static_cast<int>(m_IR)
+            << " at PC 0x" << (m_PC - 1);
+        m_logger->trace(oss.str());
+    }
+
+    m_cpuStep = CpuStep::T1;
 }
 
 void CPU6502::tickAlu() { m_aluOutput = m_alu.adc(m_aluA, m_aluB, m_aluCarryIn); }

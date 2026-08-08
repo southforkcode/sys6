@@ -13,11 +13,14 @@ protected:
     CPU6502AdcTest() { bus.attach(0x0000, 0xFFFF, ram); }
 };
 
-TEST_F(CPU6502AdcTest, FirstTickAdvancesPCPastOpcodeOnly) {
+TEST_F(CPU6502AdcTest, FourTicksAdvancePCPastOpcodeOnly) {
     ram.write(0x0000, 0x69);
     ram.write(0x0001, 0x05);
     cpu.reset();
 
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
     cpu.tick();
 
     EXPECT_EQ(cpu.PC(), 0x0001);
@@ -76,17 +79,23 @@ TEST_F(CPU6502AdcTest, AdcImmediateSetsOverflowAndNegativeOnSignedOverflow) {
     EXPECT_TRUE(cpu.NFlag());
 }
 
-TEST_F(CPU6502AdcTest, AdcImmediateTakesExactlyTwoTicksToComplete) {
+TEST_F(CPU6502AdcTest, EightTicksCompleteAdcImmediate) {
     ram.write(0x0000, 0x69);
     ram.write(0x0001, 0x05);
     cpu.reset();
     cpu.A(0x10);
 
-    cpu.tick(); // cycle 0: fetch opcode only
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T0 complete: opcode fetched, PC -> 1
 
     EXPECT_EQ(cpu.A(), 0x10);
 
-    cpu.tick(); // cycle 1: fetch operand, apply ALU, complete
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T1 complete: operand fetched, ALU applied, PC -> 2
 
     EXPECT_EQ(cpu.A(), 0x15);
     EXPECT_EQ(cpu.PC(), 0x0002);
@@ -120,7 +129,7 @@ TEST_F(CPU6502AdcTest, AdcAbsoluteAssemblesAddressLowByteFirst) {
     EXPECT_EQ(cpu.A(), 0x02);
 }
 
-TEST_F(CPU6502AdcTest, AdcAbsoluteLeavesAUnchangedUntilFinalCycle) {
+TEST_F(CPU6502AdcTest, SixteenTicksCompleteAdcAbsoluteWithAUnchangedUntilFinalCycle) {
     ram.write(0x0000, 0x6D);
     ram.write(0x0001, 0x00);
     ram.write(0x0002, 0x02);
@@ -128,19 +137,31 @@ TEST_F(CPU6502AdcTest, AdcAbsoluteLeavesAUnchangedUntilFinalCycle) {
     cpu.reset();
     cpu.A(0x10);
 
-    cpu.tick(); // cycle 0: fetch opcode
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T0: fetch opcode, PC -> 1
     EXPECT_EQ(cpu.PC(), 0x0001);
     EXPECT_EQ(cpu.A(), 0x10);
 
-    cpu.tick(); // cycle 1: fetch address low byte
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T1: fetch address low byte, PC -> 2
     EXPECT_EQ(cpu.PC(), 0x0002);
     EXPECT_EQ(cpu.A(), 0x10);
 
-    cpu.tick(); // cycle 2: fetch address high byte
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T2: fetch address high byte, PC -> 3
     EXPECT_EQ(cpu.PC(), 0x0003);
     EXPECT_EQ(cpu.A(), 0x10);
 
-    cpu.tick(); // cycle 3: read operand from memory, apply ALU
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick(); // T3: read operand from memory, apply ALU
 
     EXPECT_EQ(cpu.A(), 0x15);
 }

@@ -9,6 +9,7 @@
 class Bus;
 
 enum class CpuStep : uint8_t { T0, T1, T2, T3 };
+enum class ClockPhase : uint8_t { Low, LowToHigh, High, HighToLow };
 
 class CPU6502 : public CPU {
 public:
@@ -65,6 +66,7 @@ protected:
     std::bitset<8> m_pFlags;
 
     CpuStep m_cpuStep = CpuStep::T0;
+    ClockPhase m_clockPhase = ClockPhase::Low;
     uint16_t m_addrLatch = 0;
     uint8_t m_IR = 0;
 
@@ -79,6 +81,10 @@ protected:
     AluResult m_aluOutput{};
 
 private:
+    void onClockHigh();
+    void onClockLow();
+    void captureOpcodeFetch();
+    void commitOpcodeFetch();
     void tickAlu();
     void applyAdc(uint8_t operand);
     void tickADCImmediate();
