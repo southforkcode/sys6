@@ -70,4 +70,5 @@ protected:
 private:
     void applyAdc(uint8_t operand);
     void tickADCImmediate();
+    void tickADCAbsolute();
 };

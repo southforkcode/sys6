@@ -11,6 +11,7 @@ const uint16_t cResetVector = 0xfffc;
 const uint16_t cBRKVector = 0xfffe;
 
 const uint8_t cOpADCImmediate = 0x69;
+const uint8_t cOpADCAbsolute = 0x6D;
 
 const auto cCFlagOffset = 0;
 const auto cZFlagOffset = 1;
@@ -115,6 +116,9 @@ void CPU6502::tick() {
     case cOpADCImmediate:
         tickADCImmediate();
         break;
+    case cOpADCAbsolute:
+        tickADCAbsolute();
+        break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
         m_cycle = 0;
@@ -136,4 +140,29 @@ void CPU6502::tickADCImmediate() {
     m_PC++;
     applyAdc(operand);
     m_cycle = 0;
+}
+
+void CPU6502::tickADCAbsolute() {
+    switch (m_cycle) {
+    case 1:
+        m_addrLatch = m_bus.read(m_PC);
+        m_PC++;
+        m_cycle = 2;
+        break;
+    case 2:
+        m_addrLatch |= static_cast<uint16_t>(m_bus.read(m_PC)) << 8;
+        m_PC++;
+        m_cycle = 3;
+        break;
+    case 3: {
+        uint8_t operand = m_bus.read(m_addrLatch);
+        applyAdc(operand);
+        m_cycle = 0;
+        break;
+    }
+    default:
+        // Unreachable: this handler is only invoked while m_cycle is 1, 2, or 3.
+        m_cycle = 0;
+        break;
+    }
 }
