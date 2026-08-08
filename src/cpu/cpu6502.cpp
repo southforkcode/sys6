@@ -113,6 +113,13 @@ const uint8_t cOpDEX = 0xCA;
 const uint8_t cOpINY = 0xC8;
 const uint8_t cOpDEY = 0x88;
 
+const uint8_t cOpTAX = 0xAA;
+const uint8_t cOpTXA = 0x8A;
+const uint8_t cOpTAY = 0xA8;
+const uint8_t cOpTYA = 0x98;
+const uint8_t cOpTSX = 0xBA;
+const uint8_t cOpTXS = 0x9A;
+
 const uint8_t cOpLDAImmediate = 0xA9;
 const uint8_t cOpLDAZeroPage = 0xA5;
 const uint8_t cOpSTAZeroPage = 0x85;
@@ -414,6 +421,14 @@ void CPU6502::onClockHigh() {
     case cOpDEY:
         captureImpliedIncDec();
         break;
+    case cOpTAX:
+    case cOpTXA:
+    case cOpTAY:
+    case cOpTYA:
+    case cOpTSX:
+    case cOpTXS:
+        captureImpliedTransfer();
+        break;
     case cOpLDAImmediate:
         captureLoadImmediate();
         break;
@@ -564,6 +579,14 @@ void CPU6502::onClockLow() {
     case cOpINY:
     case cOpDEY:
         commitImpliedIncDec();
+        break;
+    case cOpTAX:
+    case cOpTXA:
+    case cOpTAY:
+    case cOpTYA:
+    case cOpTSX:
+    case cOpTXS:
+        commitImpliedTransfer();
         break;
     case cOpLDAImmediate:
         commitLoadImmediate();
@@ -1477,6 +1500,61 @@ void CPU6502::commitImpliedIncDec() {
     }
     ZFlag(aluZero(m_aluOutput.value));
     NFlag(aluNegative(m_aluOutput.value));
+    m_cpuStep = CpuStep::T0;
+}
+
+void CPU6502::captureImpliedTransfer() {
+    uint8_t source = 0;
+    switch (m_IR) {
+    case cOpTAX:
+    case cOpTAY:
+        source = m_A;
+        break;
+    case cOpTXA:
+    case cOpTXS:
+        source = m_X;
+        break;
+    case cOpTYA:
+        source = m_Y;
+        break;
+    case cOpTSX:
+        source = m_SP;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked for TAX/TXA/TAY/TYA/TSX/TXS.
+    }
+    m_aluA = 0;
+    m_aluB = source;
+    m_aluFunction = AluFunction::OR;
+}
+
+void CPU6502::commitImpliedTransfer() {
+    switch (m_IR) {
+    case cOpTAX:
+    case cOpTSX:
+        X(m_aluOutput.value);
+        ZFlag(aluZero(m_aluOutput.value));
+        NFlag(aluNegative(m_aluOutput.value));
+        break;
+    case cOpTAY:
+        Y(m_aluOutput.value);
+        ZFlag(aluZero(m_aluOutput.value));
+        NFlag(aluNegative(m_aluOutput.value));
+        break;
+    case cOpTXA:
+    case cOpTYA:
+        A(m_aluOutput.value);
+        ZFlag(aluZero(m_aluOutput.value));
+        NFlag(aluNegative(m_aluOutput.value));
+        break;
+    case cOpTXS:
+        // TXS: SP loaded from X, but real 6502 hardware leaves every flag
+        // untouched -- unlike every other transfer, which sets Z/N.
+        SP(m_aluOutput.value);
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked for TAX/TXA/TAY/TYA/TSX/TXS.
+    }
     m_cpuStep = CpuStep::T0;
 }
 

@@ -94,6 +94,12 @@ opcode-implementation pass adds its rows here.
 | `0xCA` | DEX | Implied | 1 | 2 | |
 | `0xC8` | INY | Implied | 1 | 2 | |
 | `0x88` | DEY | Implied | 1 | 2 | |
+| `0xAA` | TAX | Implied | 1 | 2 | |
+| `0x8A` | TXA | Implied | 1 | 2 | |
+| `0xA8` | TAY | Implied | 1 | 2 | |
+| `0x98` | TYA | Implied | 1 | 2 | |
+| `0xBA` | TSX | Implied | 1 | 2 | |
+| `0x9A` | TXS | Implied | 1 | 2 | No flags affected — see below |
 | `0xA9` | LDA | Immediate | 2 | 2 | |
 | `0xA5` | LDA | Zero Page | 2 | 3 | |
 | `0x85` | STA | Zero Page | 2 | 3 | |
@@ -150,6 +156,13 @@ of a read-modify-write: a store can't shortcut the extra cycle the way a
 read can, since the correct address must be known before the write
 happens. This matches real hardware exactly (not a divergence) —
 `STA Absolute,Y` is always 5 cycles.
+
+**`TXS` sets no flags, unlike every other transfer.** `TAX`/`TXA`/`TAY`/`TYA`/
+`TSX` all set `Z`/`N` from the value landing in the destination register —
+genuine real 6502 behavior, since the destination is a data register
+(`A`, `X`, or `Y`). `TXS` is the one exception: its destination is the stack
+pointer, which the 6502 does not treat as a flag-affecting register, so no
+flags change. Not a divergence — matches real hardware.
 
 **BRK implements full interrupt semantics, not a bare halt.** `BRK` pushes
 `PC + 2` (the address of the byte after its mandatory padding byte) and the

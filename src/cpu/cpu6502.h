@@ -165,6 +165,15 @@ private:
     void captureImpliedIncDec();
     void commitImpliedIncDec();
 
+    // Transfer family (TAX/TXA/TAY/TYA/TSX/TXS): 2 cycles, no bus access
+    // beyond the opcode fetch, copies one register into another through the
+    // ALU's OR-with-zero pass-through -- the same trick captureLoadImmediate
+    // uses -- so Z/N come from the shared aluZero()/aluNegative() helpers.
+    // TXS is the one exception: real 6502 hardware leaves every flag
+    // untouched when loading SP, so its commit skips the flag writes.
+    void captureImpliedTransfer();
+    void commitImpliedTransfer();
+
     // Load/store family (LDA/STA): LDA reuses the ALU's combinational path
     // (OR with a=0 passes the fetched byte through unchanged) so it shares
     // the same aluZero()/aluNegative() flag helpers as every other opcode;
