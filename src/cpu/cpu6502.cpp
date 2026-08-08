@@ -92,11 +92,11 @@ void CPU6502::reset() {
 void CPU6502::executeInstruction() {
     do {
         tick();
-    } while (m_cycle != 0);
+    } while (m_cpuStep != CpuStep::T0);
 }
 
 void CPU6502::tick() {
-    if (m_cycle == 0) {
+    if (m_cpuStep == CpuStep::T0) {
         uint8_t opcode = m_bus.read(m_PC);
         m_IR = opcode;
         m_PC++;
@@ -108,7 +108,7 @@ void CPU6502::tick() {
             m_logger->trace(oss.str());
         }
 
-        m_cycle = 1;
+        m_cpuStep = CpuStep::T1;
         return;
     }
 
@@ -121,48 +121,54 @@ void CPU6502::tick() {
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
-        m_cycle = 0;
+        m_cpuStep = CpuStep::T0;
         break;
     }
 }
 
+void CPU6502::tickAlu() { m_aluOutput = m_alu.adc(m_aluA, m_aluB, m_aluCarryIn); }
+
 void CPU6502::applyAdc(uint8_t operand) {
-    AluResult result = m_alu.adc(m_A, operand, CFlag());
-    A(result.value);
-    CFlag(result.carry);
-    ZFlag(result.zero);
-    VFlag(result.overflow);
-    NFlag(result.negative);
+    m_aluA = m_A;
+    m_aluB = operand;
+    m_aluCarryIn = CFlag();
+    tickAlu();
+
+    A(m_aluOutput.value);
+    CFlag(m_aluOutput.carry);
+    ZFlag(m_aluOutput.zero);
+    VFlag(m_aluOutput.overflow);
+    NFlag(m_aluOutput.negative);
 }
 
 void CPU6502::tickADCImmediate() {
     uint8_t operand = m_bus.read(m_PC);
     m_PC++;
     applyAdc(operand);
-    m_cycle = 0;
+    m_cpuStep = CpuStep::T0;
 }
 
 void CPU6502::tickADCAbsolute() {
-    switch (m_cycle) {
-    case 1:
+    switch (m_cpuStep) {
+    case CpuStep::T1:
         m_addrLatch = m_bus.read(m_PC);
         m_PC++;
-        m_cycle = 2;
+        m_cpuStep = CpuStep::T2;
         break;
-    case 2:
+    case CpuStep::T2:
         m_addrLatch |= static_cast<uint16_t>(m_bus.read(m_PC)) << 8;
         m_PC++;
-        m_cycle = 3;
+        m_cpuStep = CpuStep::T3;
         break;
-    case 3: {
+    case CpuStep::T3: {
         uint8_t operand = m_bus.read(m_addrLatch);
         applyAdc(operand);
-        m_cycle = 0;
+        m_cpuStep = CpuStep::T0;
         break;
     }
     default:
-        // Unreachable: this handler is only invoked while m_cycle is 1, 2, or 3.
-        m_cycle = 0;
+        // Unreachable: this handler is only invoked while m_cpuStep is T1, T2, or T3.
+        m_cpuStep = CpuStep::T0;
         break;
     }
 }

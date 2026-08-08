@@ -8,6 +8,8 @@
 
 class Bus;
 
+enum class CpuStep : uint8_t { T0, T1, T2, T3 };
+
 class CPU6502 : public CPU {
 public:
     explicit CPU6502(Bus &bus);
@@ -62,12 +64,22 @@ protected:
     uint8_t m_SP;  // stack pointer
     std::bitset<8> m_pFlags;
 
-    uint8_t m_cycle = 0;
+    CpuStep m_cpuStep = CpuStep::T0;
     uint16_t m_addrLatch = 0;
     uint8_t m_IR = 0;
+
+    // The ALU is a combinational unit: it has no state of its own, but real
+    // hardware wires its inputs and output through latches rather than
+    // passing them as ephemeral call arguments. These members are that
+    // wiring, made explicit.
     ALU m_alu;
+    uint8_t m_aluA = 0;
+    uint8_t m_aluB = 0;
+    bool m_aluCarryIn = false;
+    AluResult m_aluOutput{};
 
 private:
+    void tickAlu();
     void applyAdc(uint8_t operand);
     void tickADCImmediate();
     void tickADCAbsolute();
