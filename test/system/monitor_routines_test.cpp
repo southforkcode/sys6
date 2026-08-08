@@ -203,3 +203,149 @@ TEST(MonitorRoutines, ParseByteStopsAfterOneDigitOnNonHex) {
     EXPECT_EQ(fx.ram.read(monitor::kByteValAddr), 0x07);
     EXPECT_EQ(fx.ram.read(monitor::kLinePosAddr), 1); // stopped at the space
 }
+
+namespace {
+void loadDispatchDeps(RoutineTestFixture &fx) {
+    monitor::loadRoutine(fx.rom, monitor::kHexValAddr, monitor::kHexValHex);
+    monitor::loadRoutine(fx.rom, monitor::kParseAddrAddr, monitor::kParseAddrHex);
+    monitor::loadRoutine(fx.rom, monitor::kParseByteAddr, monitor::kParseByteHex);
+    monitor::loadRoutine(fx.rom, monitor::kPrintHexByteAddr, monitor::kPrintHexByteHex);
+    monitor::loadRoutine(fx.rom, monitor::kPrintNibbleAddr, monitor::kPrintNibbleHex);
+    monitor::loadRoutine(fx.rom, monitor::kPutCharAddr, monitor::kPutCharHex);
+    monitor::loadRoutine(fx.rom, monitor::kDispatchAddr, monitor::kDispatchHex);
+    monitor::loadRoutine(fx.rom, monitor::kPeekAddr, monitor::kPeekHex);
+    monitor::loadRoutine(fx.rom, monitor::kListAddr, monitor::kListHex);
+    monitor::loadRoutine(fx.rom, monitor::kPokeAddr, monitor::kPokeHex);
+    monitor::loadRoutine(fx.rom, monitor::kRunAddr, monitor::kRunHex);
+}
+} // namespace
+
+TEST(MonitorRoutines, DispatchPeeksWhenLineEndsAtAddress) {
+    RoutineTestFixture fx;
+    loadDispatchDeps(fx);
+    fx.ram.write(0x0050, 0xAB);
+    fx.loadDriver("A9 00"    // LDA #$00
+                  "85 40"    // STA $40            (LINELEN = 0)
+                  "85 41"    // STA $41            (LINEPOS = 0)
+                  "A9 50"    // LDA #$50
+                  "85 F0"    // STA $F0            (ADDR = $0050)
+                  "A9 00"    // LDA #$00
+                  "85 F1"    // STA $F1
+                  "20 00 C8" // JSR DISPATCH
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.output.str(), "0050: AB\r\n");
+}
+
+TEST(MonitorRoutines, DispatchListsRangeAcrossOneRow) {
+    RoutineTestFixture fx;
+    loadDispatchDeps(fx);
+    fx.ram.write(0x0050, 0x11);
+    fx.ram.write(0x0051, 0x22);
+    fx.ram.write(0x0052, 0x33);
+    // LINEBUF = ".0052", LINEPOS = 0, LINELEN = 5; $F0/$F1 already holds
+    // the first address ($0050), as if MAIN_LOOP's PARSE_ADDR had already
+    // run -- DISPATCH picks up from there.
+    fx.loadDriver("A9 2E"    // LDA #$2E           ('.')
+                  "85 00"    // STA $00
+                  "A9 30"    // LDA #$30           ('0')
+                  "85 01"    // STA $01
+                  "A9 30"    // LDA #$30           ('0')
+                  "85 02"    // STA $02
+                  "A9 35"    // LDA #$35           ('5')
+                  "85 03"    // STA $03
+                  "A9 32"    // LDA #$32           ('2')
+                  "85 04"    // STA $04
+                  "A9 05"    // LDA #$05
+                  "85 40"    // STA $40            (LINELEN = 5)
+                  "A9 00"    // LDA #$00
+                  "85 41"    // STA $41            (LINEPOS = 0)
+                  "A9 50"    // LDA #$50
+                  "85 F0"    // STA $F0            (ADDR = $0050)
+                  "A9 00"    // LDA #$00
+                  "85 F1"    // STA $F1
+                  "20 00 C8" // JSR DISPATCH
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(10000));
+    EXPECT_EQ(fx.output.str(), "0050: 11 22 33 \r\n");
+}
+
+TEST(MonitorRoutines, DispatchPokesBytesStartingAtAddress) {
+    RoutineTestFixture fx;
+    loadDispatchDeps(fx);
+    // LINEBUF = ": AB CD", LINEPOS = 0, LINELEN = 7; $F0/$F1 = $0060.
+    fx.loadDriver("A9 3A"    // LDA #$3A           (':')
+                  "85 00"    // STA $00
+                  "A9 20"    // LDA #$20           (' ')
+                  "85 01"    // STA $01
+                  "A9 41"    // LDA #$41           ('A')
+                  "85 02"    // STA $02
+                  "A9 42"    // LDA #$42           ('B')
+                  "85 03"    // STA $03
+                  "A9 20"    // LDA #$20           (' ')
+                  "85 04"    // STA $04
+                  "A9 43"    // LDA #$43           ('C')
+                  "85 05"    // STA $05
+                  "A9 44"    // LDA #$44           ('D')
+                  "85 06"    // STA $06
+                  "A9 07"    // LDA #$07
+                  "85 40"    // STA $40            (LINELEN = 7)
+                  "A9 00"    // LDA #$00
+                  "85 41"    // STA $41            (LINEPOS = 0)
+                  "A9 60"    // LDA #$60
+                  "85 F0"    // STA $F0            (ADDR = $0060)
+                  "A9 00"    // LDA #$00
+                  "85 F1"    // STA $F1
+                  "20 00 C8" // JSR DISPATCH
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(10000));
+    EXPECT_EQ(fx.ram.read(0x0060), 0xAB);
+    EXPECT_EQ(fx.ram.read(0x0061), 0xCD);
+}
+
+TEST(MonitorRoutines, DispatchRunsProgramAtAddress) {
+    RoutineTestFixture fx;
+    loadDispatchDeps(fx);
+    // A tiny user program: INC $80 ; RTS
+    fx.ram.write(0x0070, 0xE6);
+    fx.ram.write(0x0071, 0x80);
+    fx.ram.write(0x0072, 0x60);
+    // LINEBUF = " R", LINEPOS = 0, LINELEN = 2; $F0/$F1 = $0070.
+    fx.loadDriver("A9 20"    // LDA #$20           (' ')
+                  "85 00"    // STA $00
+                  "A9 52"    // LDA #$52           ('R')
+                  "85 01"    // STA $01
+                  "A9 02"    // LDA #$02
+                  "85 40"    // STA $40            (LINELEN = 2)
+                  "A9 00"    // LDA #$00
+                  "85 41"    // STA $41            (LINEPOS = 0)
+                  "A9 70"    // LDA #$70
+                  "85 F0"    // STA $F0            (ADDR = $0070)
+                  "A9 00"    // LDA #$00
+                  "85 F1"    // STA $F1
+                  "20 00 C8" // JSR DISPATCH
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(10000));
+    EXPECT_EQ(fx.ram.read(0x0080), 1);
+}
+
+TEST(MonitorRoutines, DispatchPrintsQuestionMarkOnMalformedSuffix) {
+    RoutineTestFixture fx;
+    loadDispatchDeps(fx);
+    // LINEBUF = "#", LINEPOS = 0, LINELEN = 1 -- '#' is none of '.'/':'/' '.
+    fx.loadDriver("A9 23"    // LDA #$23           ('#')
+                  "85 00"    // STA $00
+                  "A9 01"    // LDA #$01
+                  "85 40"    // STA $40            (LINELEN = 1)
+                  "A9 00"    // LDA #$00
+                  "85 41"    // STA $41            (LINEPOS = 0)
+                  "20 00 C8" // JSR DISPATCH
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.output.str(), "?\r\n");
+}

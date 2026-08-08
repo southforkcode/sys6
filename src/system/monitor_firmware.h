@@ -36,7 +36,12 @@ constexpr uint16_t kPrintStringAddr = 0xC300;
 constexpr uint16_t kHexValAddr = 0xC700;
 constexpr uint16_t kParseAddrAddr = 0xC500;
 constexpr uint16_t kParseByteAddr = 0xC600;
+constexpr uint16_t kDispatchAddr = 0xC800;
 constexpr uint16_t kTestDriverAddr = 0xC900; // reserved for tests only
+constexpr uint16_t kPeekAddr = 0xCA00;
+constexpr uint16_t kListAddr = 0xCB00;
+constexpr uint16_t kPokeAddr = 0xCC00;
+constexpr uint16_t kRunAddr = 0xCD00;
 
 extern const std::string kGetCharHex;
 extern const std::string kPutCharHex;
@@ -46,6 +51,11 @@ extern const std::string kPrintStringHex;
 extern const std::string kHexValHex;
 extern const std::string kParseAddrHex;
 extern const std::string kParseByteHex;
+extern const std::string kDispatchHex;
+extern const std::string kPeekHex;
+extern const std::string kListHex;
+extern const std::string kPokeHex;
+extern const std::string kRunHex;
 
 // Writes `hex` into `rom` at device-relative offset (busAddr - kRomBase),
 // via ROM::load() -- not loadProgram()/MemoryDevice::write(), since

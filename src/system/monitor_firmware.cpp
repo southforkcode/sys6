@@ -189,4 +189,175 @@ const std::string kParseByteHex =
     "38"       // FAIL: SEC
     "60";      //   RTS
 
+// DISPATCH ($C800): called with LINEPOS just past a successfully-parsed
+// address in ADDR ($F0/$F1). Inspects LINEBUF[LINEPOS] and tail-jumps into
+// PEEK/LIST/POKE/RUN (so their own RTS returns straight to DISPATCH's
+// caller), or prints '?'+CRLF and returns itself.
+const std::string kDispatchHex =
+    "A5 41"    // DISPATCH: LDA $41         (LINEPOS)
+    "C5 40"    //   CMP $40                 (LINELEN)
+    "90 03"    //   BCC NOTEND
+    "4C 00 CA" //   JMP PEEK                (end of line -> peek)
+    "A6 41"    // NOTEND: LDX $41
+    "B5 00"    //   LDA $00,X               (next char)
+    "C9 2E"    //   CMP #$2E                ('.')
+    "F0 0B"    //   BEQ DOLIST
+    "C9 3A"    //   CMP #$3A                (':')
+    "F0 31"    //   BEQ DOPOKE
+    "C9 20"    //   CMP #$20                (' ')
+    "F0 32"    //   BEQ MAYBERUN
+    "4C 5B C8" //   JMP ERROR
+    "E6 41"    // DOLIST: INC $41           (skip '.')
+    "A5 F0"    //   LDA $F0
+    "85 F2"    //   STA $F2                 (stash first-addr lo)
+    "A5 F1"    //   LDA $F1
+    "85 F3"    //   STA $F3                 (stash first-addr hi)
+    "20 00 C5" //   JSR PARSE_ADDR          (second address -> $F0/$F1)
+    "B0 30"    //   BCS ERROR               (invalid second address)
+    "A5 F0"    //   LDA $F0
+    "85 F5"    //   STA $F5                 (temp = second addr lo)
+    "A5 F1"    //   LDA $F1
+    "85 F6"    //   STA $F6                 (temp hi)
+    "A5 F2"    //   LDA $F2
+    "85 F0"    //   STA $F0                 ($F0/$F1 = first addr = START)
+    "A5 F3"    //   LDA $F3
+    "85 F1"    //   STA $F1
+    "A5 F5"    //   LDA $F5
+    "85 F2"    //   STA $F2                 ($F2/$F3 = second addr = END)
+    "A5 F6"    //   LDA $F6
+    "85 F3"    //   STA $F3
+    "4C 00 CB" //   JMP LIST
+    "E6 41"    // DOPOKE: INC $41           (skip ':')
+    "4C 00 CC" //   JMP POKE
+    "A6 41"    // MAYBERUN: LDX $41
+    "E8"       //   INX                     (skip the space)
+    "E4 40"    //   CPX $40
+    "B0 09"    //   BCS ERROR               (nothing after space)
+    "B5 00"    //   LDA $00,X
+    "C9 52"    //   CMP #$52                ('R')
+    "D0 03"    //   BNE ERROR
+    "4C 00 CD" //   JMP RUN
+    "A9 3F"    // ERROR: LDA #$3F           ('?')
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0D"    //   LDA #$0D
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0A"    //   LDA #$0A
+    "20 00 C1" //   JSR PUTCHAR
+    "60";      //   RTS
+
+// PEEK ($CA00): prints ADDR ($F0/$F1) as a 4-digit hex address, ": ", the
+// byte at that address as 2 hex digits, then CRLF.
+const std::string kPeekHex =
+    "A5 F1"    // PEEK: LDA $F1             (addr hi)
+    "20 00 C2" //   JSR PRINT_HEX_BYTE
+    "A5 F0"    //   LDA $F0                 (addr lo)
+    "20 00 C2" //   JSR PRINT_HEX_BYTE
+    "A9 3A"    //   LDA #$3A                (':')
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 20"    //   LDA #$20                (' ')
+    "20 00 C1" //   JSR PUTCHAR
+    "A0 00"    //   LDY #$00
+    "B1 F0"    //   LDA ($F0),Y             (byte at ADDR)
+    "20 00 C2" //   JSR PRINT_HEX_BYTE
+    "A9 0D"    //   LDA #$0D
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0A"    //   LDA #$0A
+    "20 00 C1" //   JSR PUTCHAR
+    "60";      //   RTS
+
+// LIST ($CB00): prints START ($F0/$F1) through END ($F2/$F3) inclusive,
+// 16 bytes per row, each row prefixed with its own start address. The
+// newline for a full row is printed eagerly (before the next row's
+// prefix, not after the 16th byte) so a range that stops exactly on a row
+// boundary doesn't get a stray blank prefix or a doubled CRLF at STOP.
+const std::string kListHex =
+    "A9 00"    // LIST: LDA #$00
+    "85 F7"    //   STA $F7                 (ROWCOUNT = 0)
+    "A5 F1"    // LOOP: LDA $F1             (START hi)
+    "C5 F3"    //   CMP $F3                 (END hi)
+    "90 0A"    //   BCC CONTINUE
+    "D0 4B"    //   BNE STOP
+    "A5 F0"    //   LDA $F0                 (START lo)
+    "C5 F2"    //   CMP $F2                 (END lo)
+    "F0 02"    //   BEQ CONTINUE
+    "B0 43"    //   BCS STOP
+    "A5 F7"    // CONTINUE: LDA $F7
+    "D0 14"    //   BNE SKIP_PREFIX
+    "A5 F1"    //   LDA $F1
+    "20 00 C2" //   JSR PRINT_HEX_BYTE
+    "A5 F0"    //   LDA $F0
+    "20 00 C2" //   JSR PRINT_HEX_BYTE
+    "A9 3A"    //   LDA #$3A                (':')
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 20"    //   LDA #$20                (' ')
+    "20 00 C1" //   JSR PUTCHAR
+    "A0 00"    // SKIP_PREFIX: LDY #$00
+    "B1 F0"    //   LDA ($F0),Y
+    "20 00 C2" //   JSR PRINT_HEX_BYTE
+    "A9 20"    //   LDA #$20                (' ')
+    "20 00 C1" //   JSR PUTCHAR
+    "E6 F0"    //   INC $F0
+    "D0 02"    //   BNE NOCARRY
+    "E6 F1"    //   INC $F1
+    "E6 F7"    // NOCARRY: INC $F7
+    "A5 F7"    //   LDA $F7
+    "C9 10"    //   CMP #$10
+    "90 BE"    //   BCC LOOP
+    "A9 0D"    //   LDA #$0D
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0A"    //   LDA #$0A
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 00"    //   LDA #$00
+    "85 F7"    //   STA $F7                 (ROWCOUNT = 0)
+    "4C 04 CB" //   JMP LOOP
+    "A5 F7"    // STOP: LDA $F7
+    "F0 0A"    //   BEQ DONE_NOCRLF
+    "A9 0D"    //   LDA #$0D
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0A"    //   LDA #$0A
+    "20 00 C1" //   JSR PUTCHAR
+    "60";      // DONE_NOCRLF: RTS
+
+// POKE ($CC00): entered with LINEPOS just past ':'. Skips spaces, parses
+// one hex byte token at a time via PARSE_BYTE, writes each to consecutive
+// addresses starting at ADDR ($F0/$F1), stops at end of line or the first
+// invalid token.
+const std::string kPokeHex =
+    "A5 41"    // POKE/LOOP: LDA $41
+    "C5 40"    //   CMP $40
+    "B0 21"    //   BCS DONE
+    "A6 41"    //   LDX $41
+    "B5 00"    //   LDA $00,X
+    "C9 20"    //   CMP #$20                (space?)
+    "D0 05"    //   BNE PARSEBYTE
+    "E6 41"    //   INC $41                 (skip space)
+    "4C 00 CC" //   JMP LOOP
+    "20 00 C6" // PARSEBYTE: JSR PARSE_BYTE
+    "B0 0F"    //   BCS DONE                (invalid -> stop)
+    "A0 00"    //   LDY #$00
+    "A5 F4"    //   LDA $F4
+    "91 F0"    //   STA ($F0),Y             (write byte at ADDR)
+    "E6 F0"    //   INC $F0
+    "D0 02"    //   BNE NOCARRY
+    "E6 F1"    //   INC $F1
+    "4C 00 CC" // NOCARRY: JMP LOOP
+    "60";      // DONE: RTS
+
+// RUN ($CD00): ROM::write() is a no-op, so the firmware can't
+// self-modify a JSR operand in place. Instead it builds a 4-byte
+// trampoline in RAM at $F8-$FB ("JSR <addr>" + "RTS") and JSRs to that.
+// A user-program RTS returns into the trampoline's own RTS, which returns
+// to DISPATCH's caller.
+const std::string kRunHex =
+    "A9 20"    // RUN: LDA #$20             (JSR opcode)
+    "85 F8"    //   STA $F8
+    "A5 F0"    //   LDA $F0
+    "85 F9"    //   STA $F9
+    "A5 F1"    //   LDA $F1
+    "85 FA"    //   STA $FA
+    "A9 60"    //   LDA #$60                (RTS opcode)
+    "85 FB"    //   STA $FB
+    "20 F8 00" //   JSR $00F8               (execute trampoline)
+    "60";      //   RTS
+
 } // namespace monitor
