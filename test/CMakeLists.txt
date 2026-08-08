@@ -20,12 +20,14 @@ add_executable(sys6_tests
     memory/ram_test.cpp
     memory/rom_test.cpp
     memory/bus_test.cpp
+    utils/program_loader_test.cpp
     ${CMAKE_SOURCE_DIR}/src/cpu/alu.cpp
     ${CMAKE_SOURCE_DIR}/src/cpu/cpu6502.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/ram.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/rom.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/bus.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/log.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/program_loader.cpp
 )
 
 target_include_directories(sys6_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)

@@ -17,6 +17,7 @@ add_executable(sys6
     src/memory/rom.cpp
     src/memory/bus.cpp
     src/utils/log.cpp
+    src/utils/program_loader.cpp
 )
 
 target_include_directories(sys6 PRIVATE src)
