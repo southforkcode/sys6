@@ -182,11 +182,22 @@ as `out`; a test passes an `std::ostringstream` it can inspect.
 `step()`:
 
 ```cpp
-if (auto b = m_term.tryReadByte()) {
-    m_tty.receive(*b);
+if (!m_tty.rxReady()) {
+    if (auto b = m_term.tryReadByte()) {
+        m_tty.receive(*b);
+    }
 }
 m_cpu.executeInstruction();
 ```
+
+The `rxReady()` guard matters: without it, `step()` would pull a fresh byte
+from `m_term` on every call regardless of whether `TTY`'s single holding
+register is already occupied, and `TTY::receive()` silently drops a byte
+that arrives while one is still pending — so most keystrokes would never
+reach the CPU. (Caught during implementation: the `TTY.STATUS/DATA`
+register bullet earlier in this doc already says "if a byte is waiting and
+the peripheral's RX holding slot is empty" — this is that condition, made
+explicit in code.)
 
 `run()` calls `m_cpu.reset()` once, then loops `step()` forever.
 

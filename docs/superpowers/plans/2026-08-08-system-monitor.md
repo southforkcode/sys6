@@ -1822,8 +1822,14 @@ System::System(TerminalIO &term, std::ostream &out)
 void System::reset() { m_cpu.reset(); }
 
 void System::step() {
-    if (auto b = m_term.tryReadByte()) {
-        m_tty.receive(*b);
+    // Only pull a new byte when TTY's single holding register is free --
+    // otherwise a byte read from the real terminal (or a fake's queue)
+    // would be silently dropped by TTY::receive() before the CPU ever
+    // gets a chance to consume the one already latched.
+    if (!m_tty.rxReady()) {
+        if (auto b = m_term.tryReadByte()) {
+            m_tty.receive(*b);
+        }
     }
     m_cpu.executeInstruction();
 }
