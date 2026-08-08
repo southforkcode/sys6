@@ -14,6 +14,11 @@ const uint8_t cOpBRK = 0x00;
 const uint8_t cOpJSR = 0x20;
 const uint8_t cOpRTS = 0x60;
 
+const uint8_t cOpPHP = 0x08;
+const uint8_t cOpPHA = 0x48;
+const uint8_t cOpPLP = 0x28;
+const uint8_t cOpPLA = 0x68;
+
 const uint8_t cOpADCImmediate = 0x69;
 const uint8_t cOpADCAbsolute = 0x6D;
 const uint8_t cOpADCZeroPage = 0x65;
@@ -479,6 +484,14 @@ void CPU6502::onClockHigh() {
     case cOpRTS:
         captureRTS();
         break;
+    case cOpPHA:
+    case cOpPHP:
+        captureImpliedPush();
+        break;
+    case cOpPLA:
+    case cOpPLP:
+        captureImpliedPull();
+        break;
     default:
         break; // unimplemented opcode: nothing to capture
     }
@@ -652,6 +665,14 @@ void CPU6502::onClockLow() {
         break;
     case cOpRTS:
         commitRTS();
+        break;
+    case cOpPHA:
+    case cOpPHP:
+        commitImpliedPush();
+        break;
+    case cOpPLA:
+    case cOpPLP:
+        commitImpliedPull();
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
@@ -1951,5 +1972,79 @@ void CPU6502::commitRTS() {
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::captureImpliedPush() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        static_cast<void>(m_bus.read(m_PC)); // dummy read: internal-operation cycle, discarded
+        break;
+    case CpuStep::T2:
+        break; // idle: the push happens in commit, where m_SP is authoritative
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T2.
+    }
+}
+
+void CPU6502::commitImpliedPush() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2: {
+        uint8_t value = A();
+        if (m_IR == cOpPHP) {
+            BFlag(true); // no physical B flip-flop -- synthesized on every push, same as BRK
+            value = P();
+        }
+        m_bus.write(static_cast<uint16_t>(0x0100 + m_SP), value);
+        m_SP--;
+        m_cpuStep = CpuStep::T0;
+        break;
+    }
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T2.
+    }
+}
+
+void CPU6502::captureImpliedPull() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        static_cast<void>(m_bus.read(m_PC)); // dummy read: internal-operation cycle, discarded
+        break;
+    case CpuStep::T2:
+        break; // idle: S increment happens in commit, where m_SP is authoritative
+    case CpuStep::T3:
+        m_addrLatch = m_bus.read(static_cast<uint16_t>(0x0100 + m_SP));
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T3.
+    }
+}
+
+void CPU6502::commitImpliedPull() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_SP++;
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3: {
+        auto pulled = static_cast<uint8_t>(m_addrLatch);
+        if (m_IR == cOpPLA) {
+            m_A = pulled;
+            ZFlag(aluZero(pulled));
+            NFlag(aluNegative(pulled));
+        } else {
+            P(pulled);
+        }
+        m_cpuStep = CpuStep::T0;
+        break;
+    }
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T3.
     }
 }

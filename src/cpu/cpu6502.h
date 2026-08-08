@@ -215,4 +215,13 @@ private:
     void commitJSR();
     void captureRTS();
     void commitRTS();
+
+    // Stack family (PHA/PHP/PLA/PLP): PHA/PHP push A/P (PHP forces B to 1,
+    // same real-hardware reason BRK does); PLA/PLP pull into A/P. PLA sets
+    // Z/N from the pulled byte; PLP overwrites the whole status register
+    // wholesale, B included -- it restores exactly what was pushed.
+    void captureImpliedPush();
+    void commitImpliedPush();
+    void captureImpliedPull();
+    void commitImpliedPull();
 };

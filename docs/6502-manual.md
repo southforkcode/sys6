@@ -122,6 +122,10 @@ opcode-implementation pass adds its rows here.
 | `0x00` | BRK | Implied | 2 | 7 | Full interrupt semantics — see below |
 | `0x20` | JSR | Absolute | 3 | 6 | Pushes PC of its own last byte — see below |
 | `0x60` | RTS | Implied | 1 | 6 | Pulls return address and adds one — see below |
+| `0x48` | PHA | Implied | 1 | 3 | |
+| `0x68` | PLA | Implied | 1 | 4 | Sets Z/N from the pulled byte |
+| `0x08` | PHP | Implied | 1 | 3 | Forces B to 1 in the pushed byte, like BRK |
+| `0x28` | PLP | Implied | 1 | 4 | Overwrites the whole status register, B included |
 
 ## Divergences from real hardware
 
