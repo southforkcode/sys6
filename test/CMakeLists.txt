@@ -1,10 +1,12 @@
 include(GoogleTest)
 
 add_executable(sys6_tests
+    cpu/alu_test.cpp
     cpu/cpu6502_test.cpp
     memory/ram_test.cpp
     memory/rom_test.cpp
     memory/bus_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpu/alu.cpp
     ${CMAKE_SOURCE_DIR}/src/cpu/cpu6502.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/ram.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/rom.cpp
