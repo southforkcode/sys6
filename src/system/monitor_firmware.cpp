@@ -119,4 +119,74 @@ const std::string kHexValHex =
     "38"    // INVALID: SEC
     "60";   //   RTS
 
+// PARSE_ADDR ($C500): parses hex digits from LINEBUF starting at LINEPOS
+// into ADDR ($F0/$F1, 16-bit, zero-extended), advancing LINEPOS past each
+// consumed digit, stopping at the first non-hex character. Carry set on
+// return = zero digits consumed (invalid).
+const std::string kParseAddrHex =
+    "A9 00"    // PARSE_ADDR: LDA #$00
+    "85 F0"    //   STA $F0                 (ADDRLO = 0)
+    "85 F1"    //   STA $F1                 (ADDRHI = 0)
+    "85 F5"    //   STA $F5                 (digit count = 0)
+    "A6 41"    // LOOP: LDX $41             (X = LINEPOS)
+    "E4 40"    //   CPX $40                 (LINELEN)
+    "B0 24"    //   BCS DONE
+    "B5 00"    //   LDA $00,X               (A = LINEBUF[LINEPOS])
+    "20 00 C7" //   JSR HEXVAL
+    "B0 1D"    //   BCS DONE                (non-hex: stop, don't consume)
+    "48"       //   PHA                     (save digit)
+    "06 F0"    //   ASL $F0
+    "26 F1"    //   ROL $F1
+    "06 F0"    //   ASL $F0
+    "26 F1"    //   ROL $F1
+    "06 F0"    //   ASL $F0
+    "26 F1"    //   ROL $F1
+    "06 F0"    //   ASL $F0
+    "26 F1"    //   ROL $F1                 (ADDR <<= 4)
+    "68"       //   PLA                     (restore digit)
+    "05 F0"    //   ORA $F0
+    "85 F0"    //   STA $F0                 (ADDRLO |= digit)
+    "E6 41"    //   INC $41                 (LINEPOS++)
+    "E6 F5"    //   INC $F5                 (digit count++)
+    "4C 08 C5" //   JMP LOOP
+    "A5 F5"    // DONE: LDA $F5
+    "F0 02"    //   BEQ FAIL
+    "18"       //   CLC
+    "60"       //   RTS
+    "38"       // FAIL: SEC
+    "60";      //   RTS
+
+// PARSE_BYTE ($C600): same shape as PARSE_ADDR but parses into BYTEVAL
+// ($F4, 8-bit), capped at 2 digits.
+const std::string kParseByteHex =
+    "A9 00"    // PARSE_BYTE: LDA #$00
+    "85 F4"    //   STA $F4                 (BYTEVAL = 0)
+    "85 F5"    //   STA $F5                 (digit count = 0)
+    "A5 F5"    // LOOP: LDA $F5
+    "C9 02"    //   CMP #$02                (already 2 digits?)
+    "B0 22"    //   BCS DONE
+    "A6 41"    //   LDX $41                 (X = LINEPOS)
+    "E4 40"    //   CPX $40
+    "B0 1C"    //   BCS DONE
+    "B5 00"    //   LDA $00,X
+    "20 00 C7" //   JSR HEXVAL
+    "B0 15"    //   BCS DONE                (non-hex: stop, don't consume)
+    "48"       //   PHA
+    "06 F4"    //   ASL $F4
+    "06 F4"    //   ASL $F4
+    "06 F4"    //   ASL $F4
+    "06 F4"    //   ASL $F4                 (BYTEVAL <<= 4)
+    "68"       //   PLA
+    "05 F4"    //   ORA $F4
+    "85 F4"    //   STA $F4                 (BYTEVAL |= digit)
+    "E6 41"    //   INC $41                 (LINEPOS++)
+    "E6 F5"    //   INC $F5                 (digit count++)
+    "4C 06 C6" //   JMP LOOP
+    "A5 F5"    // DONE: LDA $F5
+    "F0 02"    //   BEQ FAIL
+    "18"       //   CLC
+    "60"       //   RTS
+    "38"       // FAIL: SEC
+    "60";      //   RTS
+
 } // namespace monitor
