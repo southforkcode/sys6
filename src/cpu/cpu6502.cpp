@@ -1,5 +1,8 @@
 #include "cpu6502.h"
 
+#include "memory/bus.h"
+
+#include <sstream>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -16,6 +19,8 @@ const auto cVFlagOffset = 6;
 const auto cNFlagOffset = 7;
 
 constexpr unsigned to_mask(unsigned offset) { return 1 << offset; }
+
+CPU6502::CPU6502(Bus &bus) : m_bus(bus) {}
 
 uint8_t CPU6502::A() const { return m_A; }
 
@@ -82,9 +87,14 @@ void CPU6502::reset() {
 }
 
 void CPU6502::executeInstruction() {
-    uint8_t ra = m_A;
-    uint8_t rx = m_X;
-    uint8_t ry = m_Y;
-    uint16_t rpc = m_PC;
-    uint16_t rsp = 0x100 + m_SP;
+    uint8_t opcode = m_bus.read(m_PC);
+
+    if (m_tracing && m_logger) {
+        std::ostringstream oss;
+        oss << "Fetched opcode 0x" << std::hex << std::uppercase << static_cast<int>(opcode)
+            << " at PC 0x" << m_PC;
+        m_logger->trace(oss.str());
+    }
+
+    m_PC++;
 }

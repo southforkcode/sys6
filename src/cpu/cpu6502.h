@@ -5,8 +5,12 @@
 #include <bitset>
 #include <cstdint>
 
+class Bus;
+
 class CPU6502 : public CPU {
 public:
+    explicit CPU6502(Bus &bus);
+
     void reset() override;
     void executeInstruction() override;
 
@@ -48,6 +52,7 @@ public:
     void NFlag(bool val);
 
 protected:
+    Bus &m_bus;
     uint8_t m_A;   // accumulator register
     uint8_t m_X;   // index register X
     uint8_t m_Y;   // index register Y

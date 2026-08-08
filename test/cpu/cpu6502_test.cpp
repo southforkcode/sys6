@@ -1,11 +1,21 @@
 #include <gtest/gtest.h>
 
 #include "cpu/cpu6502.h"
+#include "memory/bus.h"
+#include "memory/ram.h"
+
+class CPU6502Test : public ::testing::Test {
+protected:
+    RAM ram{0x10000};
+    Bus bus;
+    CPU6502 cpu{bus};
+
+    CPU6502Test() { bus.attach(0x0000, 0xFFFF, ram); }
+};
 
 TEST(CPU6502Smoke, GTestWiringWorks) { EXPECT_TRUE(true); }
 
-TEST(CPU6502Reset, SetsRegistersAndFlagsToPowerOnState) {
-    CPU6502 cpu;
+TEST_F(CPU6502Test, ResetSetsRegistersAndFlagsToPowerOnState) {
     cpu.reset();
 
     EXPECT_EQ(cpu.A(), 0);
@@ -18,48 +28,42 @@ TEST(CPU6502Reset, SetsRegistersAndFlagsToPowerOnState) {
     EXPECT_TRUE(cpu.BFlag());
 }
 
-TEST(CPU6502Registers, ARoundTripsBoundaryValues) {
-    CPU6502 cpu;
+TEST_F(CPU6502Test, ARoundTripsBoundaryValues) {
     cpu.A(0x00);
     EXPECT_EQ(cpu.A(), 0x00);
     cpu.A(0xFF);
     EXPECT_EQ(cpu.A(), 0xFF);
 }
 
-TEST(CPU6502Registers, XRoundTripsBoundaryValues) {
-    CPU6502 cpu;
+TEST_F(CPU6502Test, XRoundTripsBoundaryValues) {
     cpu.X(0x00);
     EXPECT_EQ(cpu.X(), 0x00);
     cpu.X(0xFF);
     EXPECT_EQ(cpu.X(), 0xFF);
 }
 
-TEST(CPU6502Registers, YRoundTripsBoundaryValues) {
-    CPU6502 cpu;
+TEST_F(CPU6502Test, YRoundTripsBoundaryValues) {
     cpu.Y(0x00);
     EXPECT_EQ(cpu.Y(), 0x00);
     cpu.Y(0xFF);
     EXPECT_EQ(cpu.Y(), 0xFF);
 }
 
-TEST(CPU6502Registers, PCRoundTripsBoundaryValues) {
-    CPU6502 cpu;
+TEST_F(CPU6502Test, PCRoundTripsBoundaryValues) {
     cpu.PC(0x0000);
     EXPECT_EQ(cpu.PC(), 0x0000);
     cpu.PC(0xFFFF);
     EXPECT_EQ(cpu.PC(), 0xFFFF);
 }
 
-TEST(CPU6502Registers, SPRoundTripsBoundaryValues) {
-    CPU6502 cpu;
+TEST_F(CPU6502Test, SPRoundTripsBoundaryValues) {
     cpu.SP(0x00);
     EXPECT_EQ(cpu.SP(), 0x00);
     cpu.SP(0xFF);
     EXPECT_EQ(cpu.SP(), 0xFF);
 }
 
-TEST(CPU6502Flags, EachFlagRoundTripsIndependently) {
-    CPU6502 cpu;
+TEST_F(CPU6502Test, EachFlagRoundTripsIndependently) {
     cpu.P(0x00);
 
     cpu.CFlag(true);
@@ -98,8 +102,7 @@ TEST(CPU6502Flags, EachFlagRoundTripsIndependently) {
     EXPECT_FALSE(cpu.NFlag());
 }
 
-TEST(CPU6502Flags, SettingOneFlagDoesNotDisturbOthers) {
-    CPU6502 cpu;
+TEST_F(CPU6502Test, SettingOneFlagDoesNotDisturbOthers) {
     cpu.P(0x00);
 
     cpu.CFlag(true);
@@ -121,9 +124,7 @@ TEST(CPU6502Flags, SettingOneFlagDoesNotDisturbOthers) {
     EXPECT_FALSE(cpu.VFlag());
 }
 
-TEST(CPU6502StatusByte, SettingPIsReflectedByIndividualFlags) {
-    CPU6502 cpu;
-
+TEST_F(CPU6502Test, SettingPIsReflectedByIndividualFlags) {
     // N=1 V=1 unused=0 B=1 D=0 I=1 Z=0 C=1
     cpu.P(0b11010101);
 
@@ -136,8 +137,7 @@ TEST(CPU6502StatusByte, SettingPIsReflectedByIndividualFlags) {
     EXPECT_TRUE(cpu.NFlag());
 }
 
-TEST(CPU6502StatusByte, SettingIndividualFlagsIsReflectedByP) {
-    CPU6502 cpu;
+TEST_F(CPU6502Test, SettingIndividualFlagsIsReflectedByP) {
     cpu.P(0x00);
 
     cpu.CFlag(true);
@@ -147,4 +147,23 @@ TEST(CPU6502StatusByte, SettingIndividualFlagsIsReflectedByP) {
     cpu.NFlag(true);
 
     EXPECT_EQ(cpu.P(), 0b11010101);
+}
+
+TEST_F(CPU6502Test, ExecuteInstructionFetchesOpcodeAndAdvancesPC) {
+    ram.write(0x0000, 0x42);
+    cpu.reset();
+
+    cpu.executeInstruction();
+
+    EXPECT_EQ(cpu.PC(), 0x0001);
+}
+
+TEST_F(CPU6502Test, ExecuteInstructionReadsFromCurrentPC) {
+    ram.write(0x1234, 0x99);
+    cpu.reset();
+    cpu.PC(0x1234);
+
+    cpu.executeInstruction();
+
+    EXPECT_EQ(cpu.PC(), 0x1235);
 }
