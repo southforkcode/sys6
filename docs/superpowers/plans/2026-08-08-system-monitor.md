@@ -1443,11 +1443,13 @@ TEST(MonitorFirmwareE2E, RunViaBrkReachesWarmStartPromptNotBanner) {
     fx.ram.write(0x0700, 0x00); // BRK
     fx.cpu.reset();
     typeLine(fx.cpu, fx.tty, "0700 R");
-    typeLine(fx.cpu, fx.tty, "0000");
+    // Peek an address outside LINEBUF ($00-$3F) -- "0000" would collide
+    // with the very line just typed to reach this prompt.
+    typeLine(fx.cpu, fx.tty, "0300");
     std::string expected = kBannerAndPrompt;
     // No second banner after the BRK -- just the warm-start prompt -- and
     // the monitor is still usable afterward.
-    expected += "0700 R\r\n> 0000\r\n0000: 00\r\n> ";
+    expected += "0700 R\r\n> 0300\r\n0300: 00\r\n> ";
     EXPECT_EQ(fx.output.str(), expected);
 }
 
@@ -1475,9 +1477,11 @@ TEST(MonitorFirmwareE2E, MalformedLineThenValidCommandRecovers) {
     MonitorFixture fx;
     fx.cpu.reset();
     typeLine(fx.cpu, fx.tty, "ZZ");
-    typeLine(fx.cpu, fx.tty, "0000");
+    // Peek an address outside LINEBUF ($00-$3F) -- see the comment in
+    // RunViaBrkReachesWarmStartPromptNotBanner above.
+    typeLine(fx.cpu, fx.tty, "0300");
     std::string expected = kBannerAndPrompt;
-    expected += "ZZ\r\n?\r\n> 0000\r\n0000: 00\r\n> ";
+    expected += "ZZ\r\n?\r\n> 0300\r\n0300: 00\r\n> ";
     EXPECT_EQ(fx.output.str(), expected);
 }
 
@@ -1725,14 +1729,17 @@ TEST(SystemTest, StepInjectsAvailableByteAndAdvancesTheFirmware) {
     std::ostringstream out;
     System system(term, out);
     system.reset();
-    for (char c : std::string("0000")) {
+    // "0300", not "0000" -- LINEBUF lives at RAM $00-$3F, so typing "0000"
+    // would store '0' (0x30) into LINEBUF[0], which *is* address $0000,
+    // and the peek would show that instead of fresh RAM.
+    for (char c : std::string("0300")) {
         term.push(static_cast<uint8_t>(c));
     }
     term.push(0x0D);
     for (int i = 0; i < 20000; ++i) {
         system.step();
     }
-    EXPECT_EQ(out.str(), "sys6 monitor\r\n> 0000\r\n0000: 00\r\n> ");
+    EXPECT_EQ(out.str(), "sys6 monitor\r\n> 0300\r\n0300: 00\r\n> ");
 }
 
 TEST(SystemTest, StepDoesNotFabricateInputWhenNoneIsAvailable) {
