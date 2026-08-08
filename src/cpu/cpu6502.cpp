@@ -10,6 +10,8 @@ const uint16_t cNMIVector = 0xfffa;
 const uint16_t cResetVector = 0xfffc;
 const uint16_t cBRKVector = 0xfffe;
 
+const uint8_t cOpADCImmediate = 0x69;
+
 const auto cCFlagOffset = 0;
 const auto cZFlagOffset = 1;
 const auto cIFlagOffset = 2;
@@ -110,9 +112,28 @@ void CPU6502::tick() {
     }
 
     switch (m_IR) {
+    case cOpADCImmediate:
+        tickADCImmediate();
+        break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
         m_cycle = 0;
         break;
     }
+}
+
+void CPU6502::applyAdc(uint8_t operand) {
+    AluResult result = m_alu.adc(m_A, operand, CFlag());
+    A(result.value);
+    CFlag(result.carry);
+    ZFlag(result.zero);
+    VFlag(result.overflow);
+    NFlag(result.negative);
+}
+
+void CPU6502::tickADCImmediate() {
+    uint8_t operand = m_bus.read(m_PC);
+    m_PC++;
+    applyAdc(operand);
+    m_cycle = 0;
 }

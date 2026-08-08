@@ -2,6 +2,7 @@ include(GoogleTest)
 
 add_executable(sys6_tests
     cpu/alu_test.cpp
+    cpu/cpu6502_adc_test.cpp
     cpu/cpu6502_test.cpp
     memory/ram_test.cpp
     memory/rom_test.cpp

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "alu.h"
 #include "cpu.h"
 
 #include <bitset>
@@ -64,7 +65,9 @@ protected:
     uint8_t m_cycle = 0;
     uint16_t m_addrLatch = 0;
     uint8_t m_IR = 0;
+    ALU m_alu;
 
 private:
-    // Per-opcode cycle handlers are added here as opcodes are implemented.
+    void applyAdc(uint8_t operand);
+    void tickADCImmediate();
 };
