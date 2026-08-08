@@ -136,6 +136,14 @@ const uint8_t cOpBCS = 0xB0;
 const uint8_t cOpBNE = 0xD0;
 const uint8_t cOpBEQ = 0xF0;
 
+const uint8_t cOpCLC = 0x18;
+const uint8_t cOpSEC = 0x38;
+const uint8_t cOpCLI = 0x58;
+const uint8_t cOpSEI = 0x78;
+const uint8_t cOpCLV = 0xB8;
+const uint8_t cOpCLD = 0xD8;
+const uint8_t cOpSED = 0xF8;
+
 const auto cCFlagOffset = 0;
 const auto cZFlagOffset = 1;
 const auto cIFlagOffset = 2;
@@ -431,6 +439,15 @@ void CPU6502::onClockHigh() {
     case cOpTXS:
         captureImpliedTransfer();
         break;
+    case cOpCLC:
+    case cOpSEC:
+    case cOpCLI:
+    case cOpSEI:
+    case cOpCLV:
+    case cOpCLD:
+    case cOpSED:
+        captureImpliedFlagOp();
+        break;
     case cOpLDAImmediate:
         captureLoadImmediate();
         break;
@@ -595,6 +612,15 @@ void CPU6502::onClockLow() {
     case cOpTSX:
     case cOpTXS:
         commitImpliedTransfer();
+        break;
+    case cOpCLC:
+    case cOpSEC:
+    case cOpCLI:
+    case cOpSEI:
+    case cOpCLV:
+    case cOpCLD:
+    case cOpSED:
+        commitImpliedFlagOp();
         break;
     case cOpLDAImmediate:
         commitLoadImmediate();
@@ -961,7 +987,8 @@ void CPU6502::captureReadAbsoluteX() {
         m_addrLatch = m_bus.read(m_PC);
         break;
     case CpuStep::T2: {
-        auto base = static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
+        auto base =
+            static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
         EffectiveAddress resolved = indexedAddress(base, m_X);
         m_effAddr = resolved.address;
         m_pageCrossed = resolved.pageCrossed;
@@ -1013,7 +1040,8 @@ void CPU6502::captureReadAbsoluteY() {
         m_addrLatch = m_bus.read(m_PC);
         break;
     case CpuStep::T2: {
-        auto base = static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
+        auto base =
+            static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
         EffectiveAddress resolved = indexedAddress(base, m_Y);
         m_effAddr = resolved.address;
         m_pageCrossed = resolved.pageCrossed;
@@ -1307,7 +1335,8 @@ void CPU6502::captureRmwZeroPage() {
         break;
     case CpuStep::T3:
     case CpuStep::T4:
-        break; // idle: stand-in for the dummy write-back; the ALU result is already available combinationally
+        break; // idle: stand-in for the dummy write-back; the ALU result is already available
+               // combinationally
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T4.
     }
@@ -1348,7 +1377,8 @@ void CPU6502::captureRmwZeroPageX() {
         break;
     case CpuStep::T4:
     case CpuStep::T5:
-        break; // idle: stand-in for the dummy write-back; the ALU result is already available combinationally
+        break; // idle: stand-in for the dummy write-back; the ALU result is already available
+               // combinationally
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
     }
@@ -1392,7 +1422,8 @@ void CPU6502::captureRmwAbsolute() {
         break;
     case CpuStep::T4:
     case CpuStep::T5:
-        break; // idle: stand-in for the dummy write-back; the ALU result is already available combinationally
+        break; // idle: stand-in for the dummy write-back; the ALU result is already available
+               // combinationally
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
     }
@@ -1430,7 +1461,8 @@ void CPU6502::captureRmwAbsoluteX() {
         m_addrLatch = m_bus.read(m_PC);
         break;
     case CpuStep::T2: {
-        auto base = static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
+        auto base =
+            static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
         // RMW absolute,X timing is fixed at 7 cycles on real hardware, so
         // .pageCrossed is deliberately not consulted here (unlike the
         // read-only family) -- see captureReadAbsoluteX for the contrast.
@@ -1445,7 +1477,8 @@ void CPU6502::captureRmwAbsoluteX() {
         break;
     case CpuStep::T5:
     case CpuStep::T6:
-        break; // idle: stand-in for the dummy write-back; the ALU result is already available combinationally
+        break; // idle: stand-in for the dummy write-back; the ALU result is already available
+               // combinationally
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T6.
     }
@@ -1572,6 +1605,39 @@ void CPU6502::commitImpliedTransfer() {
     m_cpuStep = CpuStep::T0;
 }
 
+void CPU6502::captureImpliedFlagOp() {
+    // No ALU involvement, no bus access: nothing to capture.
+}
+
+void CPU6502::commitImpliedFlagOp() {
+    switch (m_IR) {
+    case cOpCLC:
+        CFlag(false);
+        break;
+    case cOpSEC:
+        CFlag(true);
+        break;
+    case cOpCLI:
+        IFlag(false);
+        break;
+    case cOpSEI:
+        IFlag(true);
+        break;
+    case cOpCLV:
+        VFlag(false);
+        break;
+    case cOpCLD:
+        DFlag(false);
+        break;
+    case cOpSED:
+        DFlag(true);
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked for CLC/SEC/CLI/SEI/CLV/CLD/SED.
+    }
+    m_cpuStep = CpuStep::T0;
+}
+
 void CPU6502::captureLoadImmediate() {
     m_aluA = 0;
     m_aluB = m_bus.read(m_PC);
@@ -1651,7 +1717,8 @@ void CPU6502::captureStoreAbsoluteY() {
         m_addrLatch = m_bus.read(m_PC);
         break;
     case CpuStep::T2: {
-        auto base = static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
+        auto base =
+            static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
         // STA absolute,Y timing is fixed at 5 cycles on real hardware (a
         // store can't shortcut the extra cycle the way a read can), so
         // .pageCrossed is deliberately not consulted -- see
@@ -1744,7 +1811,8 @@ void CPU6502::captureBRK() {
         m_addrLatch = m_bus.read(cBRKVector);
         break;
     case CpuStep::T6:
-        m_addrLatch |= static_cast<uint16_t>(m_bus.read(static_cast<uint16_t>(cBRKVector + 1))) << 8;
+        m_addrLatch |= static_cast<uint16_t>(m_bus.read(static_cast<uint16_t>(cBRKVector + 1)))
+                       << 8;
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T6.
@@ -1795,9 +1863,11 @@ void CPU6502::captureJSR() {
     case CpuStep::T2:
     case CpuStep::T3:
     case CpuStep::T4:
-        break; // idle: internal S predecrement (T2) and the two pushes (T3/T4) are driven from commit, where m_PC/m_SP are authoritative
+        break; // idle: internal S predecrement (T2) and the two pushes (T3/T4) are driven from
+               // commit, where m_PC/m_SP are authoritative
     case CpuStep::T5:
-        m_addrLatch = static_cast<uint16_t>((m_addrLatch & 0x00FF) | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
+        m_addrLatch = static_cast<uint16_t>((m_addrLatch & 0x00FF) |
+                                            (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
@@ -1838,13 +1908,15 @@ void CPU6502::captureRTS() {
     switch (m_cpuStep) {
     case CpuStep::T1:
     case CpuStep::T2:
-        break; // idle: dummy read of the padding byte (T1) and the S increment before the first pull (T2)
+        break; // idle: dummy read of the padding byte (T1) and the S increment before the first
+               // pull (T2)
     case CpuStep::T3:
         m_addrLatch = m_bus.read(static_cast<uint16_t>(0x0100 + m_SP));
         break;
     case CpuStep::T4:
-        m_addrLatch =
-            static_cast<uint16_t>((m_addrLatch & 0x00FF) | (static_cast<uint16_t>(m_bus.read(static_cast<uint16_t>(0x0100 + m_SP))) << 8));
+        m_addrLatch = static_cast<uint16_t>(
+            (m_addrLatch & 0x00FF) |
+            (static_cast<uint16_t>(m_bus.read(static_cast<uint16_t>(0x0100 + m_SP))) << 8));
         break;
     case CpuStep::T5:
         break; // idle: PC is loaded from m_addrLatch (+1) in commit

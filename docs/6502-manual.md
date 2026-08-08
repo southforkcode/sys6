@@ -112,6 +112,13 @@ opcode-implementation pass adds its rows here.
 | `0xB0` | BCS | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
 | `0xD0` | BNE | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
 | `0xF0` | BEQ | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
+| `0x18` | CLC | Implied | 1 | 2 | |
+| `0x38` | SEC | Implied | 1 | 2 | |
+| `0x58` | CLI | Implied | 1 | 2 | |
+| `0x78` | SEI | Implied | 1 | 2 | |
+| `0xB8` | CLV | Implied | 1 | 2 | |
+| `0xD8` | CLD | Implied | 1 | 2 | |
+| `0xF8` | SED | Implied | 1 | 2 | |
 | `0x00` | BRK | Implied | 2 | 7 | Full interrupt semantics — see below |
 | `0x20` | JSR | Absolute | 3 | 6 | Pushes PC of its own last byte — see below |
 | `0x60` | RTS | Implied | 1 | 6 | Pulls return address and adds one — see below |

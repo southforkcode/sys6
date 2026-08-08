@@ -13,6 +13,7 @@ add_executable(sys6_tests
     cpu/cpu6502_inc_dec_test.cpp
     cpu/cpu6502_load_store_test.cpp
     cpu/cpu6502_transfer_test.cpp
+    cpu/cpu6502_flags_test.cpp
     cpu/cpu6502_branch_test.cpp
     cpu/cpu6502_brk_test.cpp
     cpu/cpu6502_jsr_rts_test.cpp

@@ -174,6 +174,13 @@ private:
     void captureImpliedTransfer();
     void commitImpliedTransfer();
 
+    // Flag family (CLC/SEC/CLI/SEI/CLV/CLD/SED): 2 cycles, no bus access
+    // beyond the opcode fetch, sets or clears exactly one status flag and
+    // leaves every other flag and register untouched. No ALU involvement --
+    // the capture stage is idle (same convention as e.g. captureRmwZeroPage).
+    void captureImpliedFlagOp();
+    void commitImpliedFlagOp();
+
     // Load/store family (LDA/STA): LDA reuses the ALU's combinational path
     // (OR with a=0 passes the fetched byte through unchanged) so it shares
     // the same aluZero()/aluNegative() flag helpers as every other opcode;
