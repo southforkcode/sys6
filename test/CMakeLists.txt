@@ -11,6 +11,7 @@ add_executable(sys6_tests
     cpu/cpu6502_cpx_cpy_test.cpp
     cpu/cpu6502_shift_test.cpp
     cpu/cpu6502_inc_dec_test.cpp
+    cpu/cpu6502_load_store_test.cpp
     cpu/cpu6502_addressing_test.cpp
     cpu/cpu6502_clock_test.cpp
     cpu/cpu6502_test.cpp

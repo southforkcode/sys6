@@ -111,6 +111,11 @@ const uint8_t cOpDEX = 0xCA;
 const uint8_t cOpINY = 0xC8;
 const uint8_t cOpDEY = 0x88;
 
+const uint8_t cOpLDAImmediate = 0xA9;
+const uint8_t cOpLDAZeroPage = 0xA5;
+const uint8_t cOpSTAZeroPage = 0x85;
+const uint8_t cOpSTAAbsoluteY = 0x99;
+
 const auto cCFlagOffset = 0;
 const auto cZFlagOffset = 1;
 const auto cIFlagOffset = 2;
@@ -365,6 +370,18 @@ void CPU6502::onClockHigh() {
     case cOpDEY:
         captureImpliedIncDec();
         break;
+    case cOpLDAImmediate:
+        captureLoadImmediate();
+        break;
+    case cOpLDAZeroPage:
+        captureLoadZeroPage();
+        break;
+    case cOpSTAZeroPage:
+        captureStoreZeroPage();
+        break;
+    case cOpSTAAbsoluteY:
+        captureStoreAbsoluteY();
+        break;
     default:
         break; // unimplemented opcode: nothing to capture
     }
@@ -490,6 +507,18 @@ void CPU6502::onClockLow() {
     case cOpINY:
     case cOpDEY:
         commitImpliedIncDec();
+        break;
+    case cOpLDAImmediate:
+        commitLoadImmediate();
+        break;
+    case cOpLDAZeroPage:
+        commitLoadZeroPage();
+        break;
+    case cOpSTAZeroPage:
+        commitStoreZeroPage();
+        break;
+    case cOpSTAAbsoluteY:
+        commitStoreAbsoluteY();
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
@@ -1373,4 +1402,121 @@ void CPU6502::commitImpliedIncDec() {
     ZFlag(aluZero(m_aluOutput.value));
     NFlag(aluNegative(m_aluOutput.value));
     m_cpuStep = CpuStep::T0;
+}
+
+void CPU6502::captureLoadImmediate() {
+    m_aluA = 0;
+    m_aluB = m_bus.read(m_PC);
+    m_aluFunction = AluFunction::OR;
+}
+
+void CPU6502::commitLoadImmediate() {
+    m_PC++;
+    A(m_aluOutput.value);
+    ZFlag(aluZero(m_aluOutput.value));
+    NFlag(aluNegative(m_aluOutput.value));
+    m_cpuStep = CpuStep::T0;
+}
+
+void CPU6502::captureLoadZeroPage() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2:
+        m_aluA = 0;
+        m_aluB = m_bus.read(m_addrLatch);
+        m_aluFunction = AluFunction::OR;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1 or T2.
+    }
+}
+
+void CPU6502::commitLoadZeroPage() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        A(m_aluOutput.value);
+        ZFlag(aluZero(m_aluOutput.value));
+        NFlag(aluNegative(m_aluOutput.value));
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1 or T2.
+    }
+}
+
+void CPU6502::captureStoreZeroPage() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2:
+        break; // idle: the store itself happens in commit, where m_A is authoritative
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1 or T2.
+    }
+}
+
+void CPU6502::commitStoreZeroPage() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_bus.write(m_addrLatch, m_A);
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1 or T2.
+    }
+}
+
+void CPU6502::captureStoreAbsoluteY() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2: {
+        auto base = static_cast<uint16_t>(m_addrLatch | (static_cast<uint16_t>(m_bus.read(m_PC)) << 8));
+        // STA absolute,Y timing is fixed at 5 cycles on real hardware (a
+        // store can't shortcut the extra cycle the way a read can), so
+        // .pageCrossed is deliberately not consulted -- see
+        // captureRmwAbsoluteX for the same reasoning applied to RMW.
+        EffectiveAddress resolved = indexedAddress(base, m_Y);
+        m_effAddr = resolved.address;
+        break;
+    }
+    case CpuStep::T3:
+        break; // idle: stand-in for the real hardware's wrong-address read before the index fixup
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T3.
+    }
+}
+
+void CPU6502::commitStoreAbsoluteY() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_PC++;
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        m_bus.write(m_effAddr, m_A);
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T4.
+    }
 }

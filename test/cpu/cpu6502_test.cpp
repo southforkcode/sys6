@@ -159,7 +159,7 @@ TEST_F(CPU6502Test, ExecuteInstructionFetchesOpcodeAndAdvancesPC) {
 }
 
 TEST_F(CPU6502Test, ExecuteInstructionReadsFromCurrentPC) {
-    ram.write(0x1234, 0x99);
+    ram.write(0x1234, 0x42); // unimplemented opcode: treated as a 1-cycle no-op
     cpu.reset();
     cpu.PC(0x1234);
 

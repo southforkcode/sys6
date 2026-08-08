@@ -153,4 +153,18 @@ private:
     // beyond the opcode fetch, operates directly on X or Y.
     void captureImpliedIncDec();
     void commitImpliedIncDec();
+
+    // Load/store family (LDA/STA): LDA reuses the ALU's combinational path
+    // (OR with a=0 passes the fetched byte through unchanged) so it shares
+    // the same aluZero()/aluNegative() flag helpers as every other opcode;
+    // C and V are real 6502 behavior left untouched. STA touches no flags
+    // and needs no ALU involvement at all.
+    void captureLoadImmediate();
+    void commitLoadImmediate();
+    void captureLoadZeroPage();
+    void commitLoadZeroPage();
+    void captureStoreZeroPage();
+    void commitStoreZeroPage();
+    void captureStoreAbsoluteY();
+    void commitStoreAbsoluteY();
 };
