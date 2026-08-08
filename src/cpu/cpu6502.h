@@ -85,6 +85,8 @@ protected:
     uint16_t m_effAddr = 0;
     bool m_pageCrossed = false;
     uint8_t m_IR = 0;
+    int8_t m_branchOffset = 0;
+    bool m_branchTaken = false;
 
     // The ALU is a combinational unit: it has no state of its own, but real
     // hardware wires its inputs and output through latches rather than
@@ -100,6 +102,7 @@ protected:
     AluResult m_aluOutput{};
 
     static EffectiveAddress indexedAddress(uint16_t base, uint8_t index);
+    static EffectiveAddress relativeAddress(uint16_t base, int8_t offset);
 
 private:
     void onClockHigh();
@@ -167,4 +170,10 @@ private:
     void commitStoreZeroPage();
     void captureStoreAbsoluteY();
     void commitStoreAbsoluteY();
+
+    // Relative branches (BEQ/BNE/BCS/BCC/BPL/BMI/BVS/BVC): one shared pair
+    // for all 8, deciding the condition and target address from m_IR, the
+    // same way applyBinaryAluOp() decides its operation from m_IR.
+    void captureBranch();
+    void commitBranch();
 };

@@ -116,6 +116,15 @@ const uint8_t cOpLDAZeroPage = 0xA5;
 const uint8_t cOpSTAZeroPage = 0x85;
 const uint8_t cOpSTAAbsoluteY = 0x99;
 
+const uint8_t cOpBPL = 0x10;
+const uint8_t cOpBMI = 0x30;
+const uint8_t cOpBVC = 0x50;
+const uint8_t cOpBVS = 0x70;
+const uint8_t cOpBCC = 0x90;
+const uint8_t cOpBCS = 0xB0;
+const uint8_t cOpBNE = 0xD0;
+const uint8_t cOpBEQ = 0xF0;
+
 const auto cCFlagOffset = 0;
 const auto cZFlagOffset = 1;
 const auto cIFlagOffset = 2;
@@ -220,6 +229,29 @@ ClockPhase nextClockPhase(ClockPhase phase) {
 bool aluZero(uint8_t d) { return d == 0; }
 bool aluNegative(uint8_t d) { return (d & 0x80) != 0; }
 bool aluOverflow(uint8_t a, uint8_t b, uint8_t d) { return ((~(a ^ b)) & (a ^ d) & 0x80) != 0; }
+
+bool evaluateBranchCondition(uint8_t opcode, bool cFlag, bool zFlag, bool nFlag, bool vFlag) {
+    switch (opcode) {
+    case cOpBPL:
+        return !nFlag;
+    case cOpBMI:
+        return nFlag;
+    case cOpBVC:
+        return !vFlag;
+    case cOpBVS:
+        return vFlag;
+    case cOpBCC:
+        return !cFlag;
+    case cOpBCS:
+        return cFlag;
+    case cOpBNE:
+        return !zFlag;
+    case cOpBEQ:
+        return zFlag;
+    default:
+        return false; // unreachable: only called for the 8 branch opcodes
+    }
+}
 } // namespace
 
 void CPU6502::tick() {
@@ -382,6 +414,16 @@ void CPU6502::onClockHigh() {
     case cOpSTAAbsoluteY:
         captureStoreAbsoluteY();
         break;
+    case cOpBPL:
+    case cOpBMI:
+    case cOpBVC:
+    case cOpBVS:
+    case cOpBCC:
+    case cOpBCS:
+    case cOpBNE:
+    case cOpBEQ:
+        captureBranch();
+        break;
     default:
         break; // unimplemented opcode: nothing to capture
     }
@@ -520,6 +562,16 @@ void CPU6502::onClockLow() {
     case cOpSTAAbsoluteY:
         commitStoreAbsoluteY();
         break;
+    case cOpBPL:
+    case cOpBMI:
+    case cOpBVC:
+    case cOpBVS:
+    case cOpBCC:
+    case cOpBCS:
+    case cOpBNE:
+    case cOpBEQ:
+        commitBranch();
+        break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
         m_cpuStep = CpuStep::T0;
@@ -529,6 +581,12 @@ void CPU6502::onClockLow() {
 
 EffectiveAddress CPU6502::indexedAddress(uint16_t base, uint8_t index) {
     auto address = static_cast<uint16_t>(base + index);
+    bool pageCrossed = (base & 0xFF00) != (address & 0xFF00);
+    return EffectiveAddress{address, pageCrossed};
+}
+
+EffectiveAddress CPU6502::relativeAddress(uint16_t base, int8_t offset) {
+    auto address = static_cast<uint16_t>(base + offset);
     bool pageCrossed = (base & 0xFF00) != (address & 0xFF00);
     return EffectiveAddress{address, pageCrossed};
 }
@@ -1518,5 +1576,47 @@ void CPU6502::commitStoreAbsoluteY() {
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T4.
+    }
+}
+
+void CPU6502::captureBranch() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_branchOffset = static_cast<int8_t>(m_bus.read(m_PC));
+        m_branchTaken = evaluateBranchCondition(m_IR, CFlag(), ZFlag(), NFlag(), VFlag());
+        break;
+    case CpuStep::T2: {
+        EffectiveAddress resolved = relativeAddress(m_PC, m_branchOffset);
+        m_effAddr = resolved.address;
+        m_pageCrossed = resolved.pageCrossed;
+        break;
+    }
+    case CpuStep::T3:
+        break; // idle: stand-in for the dummy read while the high byte is fixed up
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T3.
+    }
+}
+
+void CPU6502::commitBranch() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = m_branchTaken ? CpuStep::T2 : CpuStep::T0;
+        break;
+    case CpuStep::T2:
+        if (m_pageCrossed) {
+            m_cpuStep = CpuStep::T3;
+        } else {
+            m_PC = m_effAddr;
+            m_cpuStep = CpuStep::T0;
+        }
+        break;
+    case CpuStep::T3:
+        m_PC = m_effAddr;
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T3.
     }
 }
