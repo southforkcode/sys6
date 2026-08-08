@@ -167,3 +167,27 @@ TEST_F(CPU6502Test, ExecuteInstructionReadsFromCurrentPC) {
 
     EXPECT_EQ(cpu.PC(), 0x1235);
 }
+
+TEST_F(CPU6502Test, TickPerformsOpcodeFetchOnFirstCall) {
+    ram.write(0x0000, 0x42);
+    cpu.reset();
+
+    cpu.tick();
+
+    EXPECT_EQ(cpu.PC(), 0x0001);
+}
+
+TEST_F(CPU6502Test, TickCompletesUnimplementedOpcodeAsOneCycleNoOp) {
+    ram.write(0x0000, 0x42);
+    ram.write(0x0001, 0x99);
+    cpu.reset();
+
+    cpu.tick(); // cycle 0 of first instruction: fetch 0x42, PC -> 1
+    cpu.tick(); // cycle 1 of first instruction: unimplemented, no-op, completes
+
+    EXPECT_EQ(cpu.PC(), 0x0001);
+
+    cpu.tick(); // cycle 0 of second instruction: fetch 0x99, PC -> 2
+
+    EXPECT_EQ(cpu.PC(), 0x0002);
+}

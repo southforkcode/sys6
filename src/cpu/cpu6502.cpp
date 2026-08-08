@@ -87,14 +87,32 @@ void CPU6502::reset() {
 }
 
 void CPU6502::executeInstruction() {
-    uint8_t opcode = m_bus.read(m_PC);
+    do {
+        tick();
+    } while (m_cycle != 0);
+}
 
-    if (m_tracing && m_logger) {
-        std::ostringstream oss;
-        oss << "Fetched opcode 0x" << std::hex << std::uppercase << static_cast<int>(opcode)
-            << " at PC 0x" << m_PC;
-        m_logger->trace(oss.str());
+void CPU6502::tick() {
+    if (m_cycle == 0) {
+        uint8_t opcode = m_bus.read(m_PC);
+        m_IR = opcode;
+        m_PC++;
+
+        if (m_tracing && m_logger) {
+            std::ostringstream oss;
+            oss << "Fetched opcode 0x" << std::hex << std::uppercase << static_cast<int>(opcode)
+                << " at PC 0x" << (m_PC - 1);
+            m_logger->trace(oss.str());
+        }
+
+        m_cycle = 1;
+        return;
     }
 
-    m_PC++;
+    switch (m_IR) {
+    default:
+        // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
+        m_cycle = 0;
+        break;
+    }
 }

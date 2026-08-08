@@ -13,6 +13,7 @@ public:
 
     void reset() override;
     void executeInstruction() override;
+    void tick();
 
     //--------------------------------------
     // CPU processor register getters/setters
@@ -59,4 +60,11 @@ protected:
     uint16_t m_PC; // program counter
     uint8_t m_SP;  // stack pointer
     std::bitset<8> m_pFlags;
+
+    uint8_t m_cycle = 0;
+    uint16_t m_addrLatch = 0;
+    uint8_t m_IR = 0;
+
+private:
+    // Per-opcode cycle handlers are added here as opcodes are implemented.
 };
