@@ -261,3 +261,53 @@ TEST_F(CPU6502AdcTest, TwelveTicksCompleteAdcZeroPageWithAUnchangedUntilFinalCyc
 
     EXPECT_EQ(cpu.A(), 0x15);
 }
+
+TEST_F(CPU6502AdcTest, AdcZeroPageXAddsOperandUsingIndexedAddress) {
+    ram.write(0x0000, 0x75);
+    ram.write(0x0001, 0x10);
+    ram.write(0x0015, 0x05); // effective address 0x10 + X(0x05)
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.X(0x05);
+    cpu.CFlag(false);
+
+    cpu.executeInstruction();
+
+    EXPECT_EQ(cpu.A(), 0x15);
+    EXPECT_EQ(cpu.PC(), 0x0002);
+}
+
+TEST_F(CPU6502AdcTest, AdcZeroPageXWrapsWithinZeroPage) {
+    ram.write(0x0000, 0x75);
+    ram.write(0x0001, 0xFF);
+    ram.write(0x0004, 0x07); // effective address wraps: (0xFF + 0x05) & 0xFF = 0x04
+    cpu.reset();
+    cpu.A(0x01);
+    cpu.X(0x05);
+
+    cpu.executeInstruction();
+
+    EXPECT_EQ(cpu.A(), 0x08);
+}
+
+TEST_F(CPU6502AdcTest, SixteenTicksCompleteAdcZeroPageXWithAUnchangedUntilFinalCycle) {
+    ram.write(0x0000, 0x75);
+    ram.write(0x0001, 0x10);
+    ram.write(0x0015, 0x05);
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.X(0x05);
+    cpu.CFlag(false);
+
+    for (int i = 0; i < 12; ++i) {
+        cpu.tick();
+    }
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+
+    EXPECT_EQ(cpu.A(), 0x15);
+}
