@@ -94,6 +94,19 @@ opcode-implementation pass adds its rows here.
 | `0xCA` | DEX | Implied | 1 | 2 | |
 | `0xC8` | INY | Implied | 1 | 2 | |
 | `0x88` | DEY | Implied | 1 | 2 | |
+| `0xA9` | LDA | Immediate | 2 | 2 | |
+| `0xA5` | LDA | Zero Page | 2 | 3 | |
+| `0x85` | STA | Zero Page | 2 | 3 | |
+| `0x99` | STA | Absolute,Y | 3 | 5 (fixed) | Not page-cross-conditional — see below |
+| `0x10` | BPL | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
+| `0x30` | BMI | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
+| `0x50` | BVC | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
+| `0x70` | BVS | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
+| `0x90` | BCC | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
+| `0xB0` | BCS | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
+| `0xD0` | BNE | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
+| `0xF0` | BEQ | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
+| `0x00` | BRK | Implied | 2 | 7 | Full interrupt semantics — see below |
 
 ## Divergences from real hardware
 
@@ -130,3 +143,22 @@ instructions always spend that extra cycle on `Absolute,X` regardless of
 whether the index actually crosses a page. This emulator matches that
 real-hardware behavior exactly (it is not a divergence) — `Absolute,X` for
 `ASL`/`LSR`/`ROL`/`ROR`/`INC`/`DEC` is always 7 cycles.
+
+**`STA Absolute,Y` timing is fixed, not page-cross-conditional.** Same
+reasoning as the read-modify-write note above, applied to a store instead
+of a read-modify-write: a store can't shortcut the extra cycle the way a
+read can, since the correct address must be known before the write
+happens. This matches real hardware exactly (not a divergence) —
+`STA Absolute,Y` is always 5 cycles.
+
+**BRK implements full interrupt semantics, not a bare halt.** `BRK` pushes
+`PC + 2` (the address of the byte after its mandatory padding byte) and the
+status register (with the B flag forced to 1) onto the stack, sets the I
+flag, and loads `PC` from `cBRKVector` (`0xFFFE`/`0xFFFF`) — genuine real
+6502 behavior, not a simplification. What this emulator adds on top is a
+`halted()` flag, set as part of `BRK`'s final cycle, that a driver loop can
+poll to stop issuing further instructions instead of actually executing
+whatever (if anything) lives at the vector. See
+`docs/superpowers/specs/2026-08-08-relative-branches-and-utilities-design.md`
+for the full rationale, including why no `CLC`/`SEC` opcodes were needed
+alongside this change.
