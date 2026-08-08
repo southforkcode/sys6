@@ -135,6 +135,12 @@ void CPU6502::tick() {
     }
 }
 
+void CPU6502::runToClockHigh() {
+    do {
+        tick();
+    } while (m_clockPhase != ClockPhase::High);
+}
+
 void CPU6502::onClockHigh() {
     if (m_cpuStep == CpuStep::T0) {
         captureOpcodeFetch();

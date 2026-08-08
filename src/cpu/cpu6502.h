@@ -19,6 +19,14 @@ public:
     void executeInstruction() override;
     void tick();
 
+    // Calls tick() repeatedly until the clock reaches the next High
+    // (stable) phase. Convenience for a driver that wants to observe
+    // capture-time state without manually stepping through the settling
+    // phases in between -- it can still fall back to tick() for
+    // phase-by-phase control when it does care about every intermediate
+    // step. Always advances at least one tick, even if already at High.
+    void runToClockHigh();
+
     //--------------------------------------
     // CPU processor register getters/setters
 
