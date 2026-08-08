@@ -211,51 +211,18 @@ ClockPhase nextClockPhase(ClockPhase phase) {
     }
     return ClockPhase::Low; // unreachable: all enumerators handled above
 }
+
+bool aluZero(uint8_t d) { return d == 0; }
+bool aluNegative(uint8_t d) { return (d & 0x80) != 0; }
+bool aluOverflow(uint8_t a, uint8_t b, uint8_t d) { return ((~(a ^ b)) & (a ^ d) & 0x80) != 0; }
 } // namespace
 
 void CPU6502::tick() {
     // The ALU is always-on combinational logic: it recomputes from whatever
     // is currently in its input latches on every tick, whether or not the
-    // executing opcode is using the result this cycle. m_aluOp is the
-    // function-select line choosing which operation that recompute performs.
-    switch (m_aluOp) {
-    case AluOp::ADC:
-        m_aluOutput = m_alu.adc(m_aluA, m_aluB, m_aluCarryIn);
-        break;
-    case AluOp::SBC:
-        m_aluOutput = m_alu.sbc(m_aluA, m_aluB, m_aluCarryIn);
-        break;
-    case AluOp::AND:
-        m_aluOutput = m_alu.bitwiseAnd(m_aluA, m_aluB);
-        break;
-    case AluOp::ORA:
-        m_aluOutput = m_alu.bitwiseOr(m_aluA, m_aluB);
-        break;
-    case AluOp::EOR:
-        m_aluOutput = m_alu.bitwiseXor(m_aluA, m_aluB);
-        break;
-    case AluOp::CMP:
-        m_aluOutput = m_alu.cmp(m_aluA, m_aluB);
-        break;
-    case AluOp::ASL:
-        m_aluOutput = m_alu.asl(m_aluB);
-        break;
-    case AluOp::LSR:
-        m_aluOutput = m_alu.lsr(m_aluB);
-        break;
-    case AluOp::ROL:
-        m_aluOutput = m_alu.rol(m_aluB, m_aluCarryIn);
-        break;
-    case AluOp::ROR:
-        m_aluOutput = m_alu.ror(m_aluB, m_aluCarryIn);
-        break;
-    case AluOp::INC:
-        m_aluOutput = m_alu.increment(m_aluB);
-        break;
-    case AluOp::DEC:
-        m_aluOutput = m_alu.decrement(m_aluB);
-        break;
-    }
+    // executing opcode is using the result this cycle. m_aluFunction is the
+    // function-select line (F) choosing which combinational path drives D/CO.
+    m_aluOutput = m_alu.execute(m_aluA, m_aluB, m_aluFunction, m_aluCarryIn);
 
     m_clockPhase = nextClockPhase(m_clockPhase);
 
@@ -553,10 +520,34 @@ void CPU6502::commitOpcodeFetch() {
 }
 
 void CPU6502::beginBinaryAluOp(AluOp aluOp, uint8_t regValue, uint8_t operand) {
-    m_aluOp = aluOp;
     m_aluA = regValue;
     m_aluB = operand;
     m_aluCarryIn = CFlag();
+    switch (aluOp) {
+    case AluOp::ADC:
+        m_aluFunction = AluFunction::ADD;
+        break;
+    case AluOp::SBC:
+        m_aluFunction = AluFunction::ADD;
+        m_aluB = static_cast<uint8_t>(~operand);
+        break;
+    case AluOp::AND:
+        m_aluFunction = AluFunction::AND;
+        break;
+    case AluOp::ORA:
+        m_aluFunction = AluFunction::OR;
+        break;
+    case AluOp::EOR:
+        m_aluFunction = AluFunction::XOR;
+        break;
+    case AluOp::CMP:
+        m_aluFunction = AluFunction::ADD;
+        m_aluB = static_cast<uint8_t>(~operand);
+        m_aluCarryIn = true; // compare never borrows in
+        break;
+    default:
+        break; // unreachable: only binary ops routed here
+    }
 }
 
 void CPU6502::applyBinaryAluOp(uint8_t operand) {
@@ -657,9 +648,9 @@ void CPU6502::commitBinaryAluResult() {
         // ADC/SBC: write A; C, Z, V, N all follow the arithmetic result.
         A(m_aluOutput.value);
         CFlag(m_aluOutput.carry);
-        ZFlag(m_aluOutput.zero);
-        VFlag(m_aluOutput.overflow);
-        NFlag(m_aluOutput.negative);
+        ZFlag(aluZero(m_aluOutput.value));
+        VFlag(aluOverflow(m_aluA, m_aluB, m_aluOutput.value));
+        NFlag(aluNegative(m_aluOutput.value));
         break;
     case cOpANDImmediate:
     case cOpANDZeroPage:
@@ -688,8 +679,8 @@ void CPU6502::commitBinaryAluResult() {
         // AND/ORA/EOR: write A; only Z, N follow. C and V are real 6502
         // behavior left untouched by logical ops, not an oversight.
         A(m_aluOutput.value);
-        ZFlag(m_aluOutput.zero);
-        NFlag(m_aluOutput.negative);
+        ZFlag(aluZero(m_aluOutput.value));
+        NFlag(aluNegative(m_aluOutput.value));
         break;
     case cOpCMPImmediate:
     case cOpCMPZeroPage:
@@ -707,8 +698,8 @@ void CPU6502::commitBinaryAluResult() {
     case cOpCPYAbsolute:
         // CMP/CPX/CPY: write nothing back; only C, Z, N follow.
         CFlag(m_aluOutput.carry);
-        ZFlag(m_aluOutput.zero);
-        NFlag(m_aluOutput.negative);
+        ZFlag(aluZero(m_aluOutput.value));
+        NFlag(aluNegative(m_aluOutput.value));
         break;
     default:
         break; // Unreachable: only called for opcodes routed through the binary-ALU family.
@@ -1031,9 +1022,37 @@ void CPU6502::commitReadIndirectY() {
 }
 
 void CPU6502::beginUnaryAluOp(AluOp aluOp, uint8_t value) {
-    m_aluOp = aluOp;
     m_aluB = value;
-    m_aluCarryIn = CFlag();
+    switch (aluOp) {
+    case AluOp::ASL:
+        m_aluFunction = AluFunction::SHL;
+        m_aluCarryIn = false; // unused by SHL
+        break;
+    case AluOp::LSR:
+        m_aluFunction = AluFunction::SHR;
+        m_aluCarryIn = false; // unused by SHR
+        break;
+    case AluOp::ROL:
+        m_aluFunction = AluFunction::ROL;
+        m_aluCarryIn = CFlag();
+        break;
+    case AluOp::ROR:
+        m_aluFunction = AluFunction::ROR;
+        m_aluCarryIn = CFlag();
+        break;
+    case AluOp::INC:
+        m_aluFunction = AluFunction::ADD;
+        m_aluA = 0x01;
+        m_aluCarryIn = false;
+        break;
+    case AluOp::DEC:
+        m_aluFunction = AluFunction::ADD;
+        m_aluA = 0xFF;
+        m_aluCarryIn = false;
+        break;
+    default:
+        break; // unreachable: only unary ops routed here
+    }
 }
 
 void CPU6502::applyUnaryAluOp(uint8_t value) {
@@ -1107,8 +1126,8 @@ void CPU6502::commitUnaryAluFlags() {
     case cOpRORAbsoluteX:
         // ASL/LSR/ROL/ROR: C, Z, N follow the shift result. V untouched.
         CFlag(m_aluOutput.carry);
-        ZFlag(m_aluOutput.zero);
-        NFlag(m_aluOutput.negative);
+        ZFlag(aluZero(m_aluOutput.value));
+        NFlag(aluNegative(m_aluOutput.value));
         break;
     case cOpINCZeroPage:
     case cOpINCZeroPageX:
@@ -1120,8 +1139,8 @@ void CPU6502::commitUnaryAluFlags() {
     case cOpDECAbsoluteX:
         // INC/DEC: only Z, N follow. C and V are real 6502 behavior left
         // untouched, not an oversight.
-        ZFlag(m_aluOutput.zero);
-        NFlag(m_aluOutput.negative);
+        ZFlag(aluZero(m_aluOutput.value));
+        NFlag(aluNegative(m_aluOutput.value));
         break;
     default:
         break; // Unreachable: only called for opcodes routed through the unary-ALU family.
@@ -1351,7 +1370,7 @@ void CPU6502::commitImpliedIncDec() {
     default:
         break; // Unreachable: this handler is only invoked for INX/DEX/INY/DEY.
     }
-    ZFlag(m_aluOutput.zero);
-    NFlag(m_aluOutput.negative);
+    ZFlag(aluZero(m_aluOutput.value));
+    NFlag(aluNegative(m_aluOutput.value));
     m_cpuStep = CpuStep::T0;
 }

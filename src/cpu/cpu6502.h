@@ -89,11 +89,13 @@ protected:
     // The ALU is a combinational unit: it has no state of its own, but real
     // hardware wires its inputs and output through latches rather than
     // passing them as ephemeral call arguments. These members are that
-    // wiring, made explicit.
+    // wiring, made explicit: A/B are the operand latches, m_aluFunction is
+    // the function-select line (F), m_aluCarryIn is CI, and m_aluOutput
+    // holds D/CO.
     ALU m_alu;
-    AluOp m_aluOp = AluOp::ADC;
     uint8_t m_aluA = 0;
     uint8_t m_aluB = 0;
+    AluFunction m_aluFunction = AluFunction::ADD;
     bool m_aluCarryIn = false;
     AluResult m_aluOutput{};
 
