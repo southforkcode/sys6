@@ -11,7 +11,7 @@ class Bus;
 
 enum class CpuStep : uint8_t { T0, T1, T2, T3, T4, T5, T6 };
 enum class ClockPhase : uint8_t { Low, LowToHigh, High, HighToLow };
-enum class AluOp : uint8_t { ADC, SBC, AND, ORA, EOR, CMP, ASL, LSR, ROL, ROR, INC, DEC };
+enum class AluOp : uint8_t { ADC, SBC, AND, ORA, EOR, CMP, ASL, LSR, ROL, ROR, INC, DEC, BIT };
 
 struct EffectiveAddress {
     uint16_t address;
@@ -199,19 +199,52 @@ private:
     void captureImpliedFlagOp();
     void commitImpliedFlagOp();
 
-    // Load/store family (LDA/STA): LDA reuses the ALU's combinational path
-    // (OR with a=0 passes the fetched byte through unchanged) so it shares
-    // the same aluZero()/aluNegative() flag helpers as every other opcode;
-    // C and V are real 6502 behavior left untouched. STA touches no flags
-    // and needs no ALU involvement at all.
+    // Load/store family (LDA/LDX/LDY/STA): loads reuse the ALU's
+    // combinational path (OR with a=0 passes the fetched byte through
+    // unchanged) so they share the same aluZero()/aluNegative() flag
+    // helpers as every other opcode; C and V are real 6502 behavior left
+    // untouched. STA touches no flags and needs no ALU involvement at all.
+    // One capture/commit pair per addressing-mode shape, same convention as
+    // the binary-ALU family: each pair hardcodes its own index register
+    // (X or Y) where the addressing mode requires one, and commit picks the
+    // destination register (A/X/Y) from m_IR -- mirroring how
+    // commitBinaryAluResult() picks the operation from m_IR.
     void captureLoadImmediate();
     void commitLoadImmediate();
     void captureLoadZeroPage();
     void commitLoadZeroPage();
+    void captureLoadZeroPageX();
+    void commitLoadZeroPageX();
+    void captureLoadZeroPageY();
+    void commitLoadZeroPageY();
+    void captureLoadAbsolute();
+    void commitLoadAbsolute();
+    void captureLoadAbsoluteX();
+    void commitLoadAbsoluteX();
+    void captureLoadAbsoluteY();
+    void commitLoadAbsoluteY();
+    void captureLoadIndirectX();
+    void commitLoadIndirectX();
+    void captureLoadIndirectY();
+    void commitLoadIndirectY();
+    void commitLoadResult();
+    uint8_t storeSourceValue() const;
     void captureStoreZeroPage();
     void commitStoreZeroPage();
+    void captureStoreZeroPageX();
+    void commitStoreZeroPageX();
+    void captureStoreZeroPageY();
+    void commitStoreZeroPageY();
+    void captureStoreAbsolute();
+    void commitStoreAbsolute();
+    void captureStoreAbsoluteX();
+    void commitStoreAbsoluteX();
     void captureStoreAbsoluteY();
     void commitStoreAbsoluteY();
+    void captureStoreIndirectX();
+    void commitStoreIndirectX();
+    void captureStoreIndirectY();
+    void commitStoreIndirectY();
 
     // Relative branches (BEQ/BNE/BCS/BCC/BPL/BMI/BVS/BVC): one shared pair
     // for all 8, deciding the condition and target address from m_IR, the
@@ -233,6 +266,29 @@ private:
     void commitJSR();
     void captureRTS();
     void commitRTS();
+
+    // JMP: Absolute loads PC directly from its two-byte operand. Indirect
+    // reads a pointer from the operand address and loads PC from the
+    // 16-bit value stored there -- reproducing the real 6502 hardware bug
+    // where the high-byte fetch fails to cross a page boundary if the
+    // pointer's low byte is 0xFF, wrapping within the same page instead.
+    void captureJMPAbsolute();
+    void commitJMPAbsolute();
+    void captureJMPIndirect();
+    void commitJMPIndirect();
+
+    // NOP: 2 cycles, no bus access beyond the opcode fetch, no state change
+    // at all -- same shape as captureImpliedFlagOp, minus the flag write.
+    void captureNOP();
+    void commitNOP();
+
+    // RTI: pulls P (B included, same wholesale restore PLP already does)
+    // then PCL/PCH from the stack -- the same three-pull shape BRK's push
+    // mirrors in reverse. Unlike every other pull in this codebase, the
+    // reads happen directly in commit rather than being staged in capture,
+    // since nothing needs to observe the pulled status byte mid-instruction.
+    void captureRTI();
+    void commitRTI();
 
     // Stack family (PHA/PHP/PLA/PLP): PHA/PHP push A/P (PHP forces B to 1,
     // same real-hardware reason BRK does); PLA/PLP pull into A/P. PLA sets

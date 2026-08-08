@@ -102,8 +102,37 @@ opcode-implementation pass adds its rows here.
 | `0x9A` | TXS | Implied | 1 | 2 | No flags affected — see below |
 | `0xA9` | LDA | Immediate | 2 | 2 | |
 | `0xA5` | LDA | Zero Page | 2 | 3 | |
+| `0xB5` | LDA | Zero Page,X | 2 | 4 | No dummy read — see below |
+| `0xAD` | LDA | Absolute | 3 | 4 | |
+| `0xBD` | LDA | Absolute,X | 3 | 4 (+1 if page crossed) | No dummy read — see below |
+| `0xB9` | LDA | Absolute,Y | 3 | 4 (+1 if page crossed) | No dummy read — see below |
+| `0xA1` | LDA | (Indirect,X) | 2 | 6 | No dummy read — see below |
+| `0xB1` | LDA | (Indirect),Y | 2 | 5 (+1 if page crossed) | No dummy read — see below |
+| `0xA2` | LDX | Immediate | 2 | 2 | |
+| `0xA6` | LDX | Zero Page | 2 | 3 | |
+| `0xB6` | LDX | Zero Page,Y | 2 | 4 | No dummy read — see below |
+| `0xAE` | LDX | Absolute | 3 | 4 | |
+| `0xBE` | LDX | Absolute,Y | 3 | 4 (+1 if page crossed) | No dummy read — see below |
+| `0xA0` | LDY | Immediate | 2 | 2 | |
+| `0xA4` | LDY | Zero Page | 2 | 3 | |
+| `0xB4` | LDY | Zero Page,X | 2 | 4 | No dummy read — see below |
+| `0xAC` | LDY | Absolute | 3 | 4 | |
+| `0xBC` | LDY | Absolute,X | 3 | 4 (+1 if page crossed) | No dummy read — see below |
 | `0x85` | STA | Zero Page | 2 | 3 | |
+| `0x95` | STA | Zero Page,X | 2 | 4 | No dummy read — see below |
+| `0x8D` | STA | Absolute | 3 | 4 | |
+| `0x9D` | STA | Absolute,X | 3 | 5 (fixed) | Not page-cross-conditional — see below |
 | `0x99` | STA | Absolute,Y | 3 | 5 (fixed) | Not page-cross-conditional — see below |
+| `0x81` | STA | (Indirect,X) | 2 | 6 | No dummy read — see below |
+| `0x91` | STA | (Indirect),Y | 2 | 6 (fixed) | Not page-cross-conditional — see below |
+| `0x86` | STX | Zero Page | 2 | 3 | |
+| `0x96` | STX | Zero Page,Y | 2 | 4 | No dummy read — see below |
+| `0x8E` | STX | Absolute | 3 | 4 | |
+| `0x84` | STY | Zero Page | 2 | 3 | |
+| `0x94` | STY | Zero Page,X | 2 | 4 | No dummy read — see below |
+| `0x8C` | STY | Absolute | 3 | 4 | |
+| `0x24` | BIT | Zero Page | 2 | 3 | N/V come from the operand's bits 7/6, not the AND result — see below |
+| `0x2C` | BIT | Absolute | 3 | 4 | N/V come from the operand's bits 7/6, not the AND result — see below |
 | `0x10` | BPL | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
 | `0x30` | BMI | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
 | `0x50` | BVC | Relative | 2 | 2 (+1 taken, +1 more if page crossed) | |
@@ -122,10 +151,14 @@ opcode-implementation pass adds its rows here.
 | `0x00` | BRK | Implied | 2 | 7 | Full interrupt semantics — see below |
 | `0x20` | JSR | Absolute | 3 | 6 | Pushes PC of its own last byte — see below |
 | `0x60` | RTS | Implied | 1 | 6 | Pulls return address and adds one — see below |
+| `0x4C` | JMP | Absolute | 3 | 3 | |
+| `0x6C` | JMP | Indirect | 3 | 5 | Reproduces the real hardware page-boundary wraparound bug — see below |
 | `0x48` | PHA | Implied | 1 | 3 | |
 | `0x68` | PLA | Implied | 1 | 4 | Sets Z/N from the pulled byte |
 | `0x08` | PHP | Implied | 1 | 3 | Forces B to 1 in the pushed byte, like BRK |
 | `0x28` | PLP | Implied | 1 | 4 | Overwrites the whole status register, B included |
+| `0x40` | RTI | Implied | 1 | 6 | Pulls P (B included) then PC from the stack — mirrors BRK's push, in reverse |
+| `0xEA` | NOP | Implied | 1 | 2 | |
 
 ## Divergences from real hardware
 
@@ -198,3 +231,21 @@ landing on the actual next instruction rather than re-reading `JSR`'s last
 byte. This asymmetry is why the two must always be paired: pulling a
 `JSR`-pushed address with anything other than `RTS` (or a matching manual
 `+1`) returns to the wrong address.
+
+**`JMP (Indirect)` reproduces the real 6502 page-boundary wraparound bug.**
+When fetching the target address's high byte, real hardware increments only
+the low byte of the pointer address — it never carries into the high byte.
+If the pointer is stored at a page boundary (its low byte is `0xFF`), the
+high byte of the target is read from the *start* of the same page instead
+of the following page (e.g. a pointer at `$02FF` reads its target's high
+byte from `$0200`, not `$0300`). This emulator matches that behavior
+exactly — not a divergence, and not fixed — consistent with this codebase's
+policy of reproducing real 6502 behavior except where explicitly documented
+above as a deliberate simplification.
+
+**`BIT`'s N and V flags come from the operand, not the AND result.** Every
+other flag-setting instruction in this codebase derives `N` from the
+computed result's bit 7 (`aluNegative()`). `BIT` is the one exception on
+real hardware: `Z` follows `A & M` like any logical op, but `N` and `V`
+are copied directly from bits 7 and 6 of the *operand* `M`, regardless of
+what the AND produces. Genuine real 6502 behavior, not a simplification.

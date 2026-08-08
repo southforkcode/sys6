@@ -9,15 +9,20 @@ add_executable(sys6_tests
     cpu/cpu6502_eor_test.cpp
     cpu/cpu6502_cmp_test.cpp
     cpu/cpu6502_cpx_cpy_test.cpp
+    cpu/cpu6502_bit_test.cpp
     cpu/cpu6502_shift_test.cpp
     cpu/cpu6502_inc_dec_test.cpp
     cpu/cpu6502_load_store_test.cpp
+    cpu/cpu6502_ldx_ldy_test.cpp
+    cpu/cpu6502_stx_sty_test.cpp
     cpu/cpu6502_transfer_test.cpp
     cpu/cpu6502_flags_test.cpp
     cpu/cpu6502_branch_test.cpp
     cpu/cpu6502_brk_test.cpp
     cpu/cpu6502_jsr_rts_test.cpp
+    cpu/cpu6502_jmp_test.cpp
     cpu/cpu6502_stack_test.cpp
+    cpu/cpu6502_nop_rti_test.cpp
     cpu/cpu6502_fibonacci_e2e_test.cpp
     cpu/cpu6502_addressing_test.cpp
     cpu/cpu6502_clock_test.cpp
