@@ -179,6 +179,12 @@ void CPU6502::onClockLow() {
     }
 }
 
+EffectiveAddress CPU6502::indexedAddress(uint16_t base, uint8_t index) {
+    auto address = static_cast<uint16_t>(base + index);
+    bool pageCrossed = (base & 0xFF00) != (address & 0xFF00);
+    return EffectiveAddress{address, pageCrossed};
+}
+
 void CPU6502::captureOpcodeFetch() { m_IR = m_bus.read(m_PC); }
 
 void CPU6502::commitOpcodeFetch() {

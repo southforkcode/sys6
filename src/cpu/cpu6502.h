@@ -8,8 +8,13 @@
 
 class Bus;
 
-enum class CpuStep : uint8_t { T0, T1, T2, T3 };
+enum class CpuStep : uint8_t { T0, T1, T2, T3, T4, T5 };
 enum class ClockPhase : uint8_t { Low, LowToHigh, High, HighToLow };
+
+struct EffectiveAddress {
+    uint16_t address;
+    bool pageCrossed;
+};
 
 class CPU6502 : public CPU {
 public:
@@ -76,6 +81,8 @@ protected:
     CpuStep m_cpuStep = CpuStep::T0;
     ClockPhase m_clockPhase = ClockPhase::Low;
     uint16_t m_addrLatch = 0;
+    uint16_t m_effAddr = 0;
+    bool m_pageCrossed = false;
     uint8_t m_IR = 0;
 
     // The ALU is a combinational unit: it has no state of its own, but real
@@ -87,6 +94,8 @@ protected:
     uint8_t m_aluB = 0;
     bool m_aluCarryIn = false;
     AluResult m_aluOutput{};
+
+    static EffectiveAddress indexedAddress(uint16_t base, uint8_t index);
 
 private:
     void onClockHigh();
