@@ -4,9 +4,11 @@ add_executable(sys6_tests
     cpu/cpu6502_test.cpp
     memory/ram_test.cpp
     memory/rom_test.cpp
+    memory/bus_test.cpp
     ${CMAKE_SOURCE_DIR}/src/cpu/cpu6502.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/ram.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/rom.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory/bus.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/log.cpp
 )
 

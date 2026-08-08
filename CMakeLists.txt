@@ -14,6 +14,7 @@ add_executable(sys6
     src/cpu/cpu6502.cpp
     src/memory/ram.cpp
     src/memory/rom.cpp
+    src/memory/bus.cpp
     src/utils/log.cpp
 )
 
