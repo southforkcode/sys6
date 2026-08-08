@@ -15,6 +15,8 @@ protected:
 
 TEST(CPU6502Smoke, GTestWiringWorks) { EXPECT_TRUE(true); }
 
+TEST_F(CPU6502Test, IdReturnsMos6502) { EXPECT_EQ(cpu.id(), CpuId::Mos6502); }
+
 TEST_F(CPU6502Test, ColdResetLoadsPCFromVectorAndLandsSPOnFD) {
     ram.write(0xFFFC, 0x34);
     ram.write(0xFFFD, 0x12);

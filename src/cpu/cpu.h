@@ -2,8 +2,13 @@
 
 #include "utils/log.h"
 
+#include <cstdint>
+
+enum class CpuId : uint8_t { Mos6502 };
+
 class CPU {
 public:
+    virtual CpuId id() const = 0;
     virtual void reset() = 0;
     virtual void executeInstruction() = 0;
 

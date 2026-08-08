@@ -43,6 +43,8 @@ public:
     // step. Always advances at least one tick, even if already at High.
     void runToClockHigh();
 
+    CpuId id() const override;
+
     //--------------------------------------
     // CPU processor register getters/setters
 

@@ -200,6 +200,8 @@ constexpr unsigned to_mask(unsigned offset) { return 1 << offset; }
 
 CPU6502::CPU6502(Bus &bus) : m_bus(bus) {}
 
+CpuId CPU6502::id() const { return CpuId::Mos6502; }
+
 uint8_t CPU6502::A() const { return m_A; }
 
 uint8_t CPU6502::X() const { return m_X; }
