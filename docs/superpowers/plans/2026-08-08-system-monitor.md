@@ -4,7 +4,7 @@
 
 **Goal:** Let a human interact with the emulated 6502 through a real terminal, via a memory-mapped TTY peripheral and a hand-assembled monitor firmware (peek/poke/list/run) running on the CPU itself — never by modifying `CPU6502`.
 
-**Architecture:** A `TTY` `MemoryDevice` (2-register STATUS/DATA) sits on the `Bus` alongside `RAM`/`ROM`. A `System` class owns all of it plus a `TerminalIO` seam that bridges real stdin/stdout in raw mode. The actual peek/poke/list/run logic is 6502 machine code (hand-assembled hex, `loadProgram()`-loaded into `ROM`) that polls the `TTY` registers — the same way real WozMon-era hardware worked.
+**Architecture:** A `TTY` `MemoryDevice` (2-register STATUS/DATA) sits on the `Bus` alongside `RAM`/`ROM`. A `System` class owns all of it plus a `TerminalIO` seam that bridges real stdin/stdout in raw mode. The actual peek/poke/list/run logic is 6502 machine code (hand-assembled hex, loaded into `ROM` via `ROM::load()` — see the Global Constraints note below) that polls the `TTY` registers — the same way real WozMon-era hardware worked.
 
 **Tech Stack:** C++17, CMake, GoogleTest/CTest, POSIX `termios` (macOS/Darwin target).
 
@@ -12,7 +12,8 @@
 
 - Never modify `CPU6502` (`src/cpu/cpu6502.h`/`.cpp`) — per `CLAUDE.md`, it is the frozen reference implementation. Everything here is built against its existing public interface (`reset()`, `executeInstruction()`, `PC()`, etc.).
 - Memory map: `RAM` `0x0000`–`0x7FFF` (32 KiB), `TTY` `0x8000`–`0x8001`, `0x8002`–`0xBFFF` unmapped, `ROM` `0xC000`–`0xFFFF` (16 KiB, monitor firmware).
-- `loadProgram(device, offset, hex)` (`src/utils/program_loader.h`) writes at **device-relative offsets**, not bus addresses — the `Bus` does the address→offset translation (`addr - mapping.start`), `loadProgram()` does not. Since `ROM` is mapped at bus `0xC000`, every hex blob loaded into it must be loaded at `busAddress - 0xC000`, never at the raw bus address. This is why `monitor::loadRoutine()` exists (Task 2) — it's the one place this subtraction happens, so it's never repeated (and never gotten wrong) at each call site.
+- `ROM::write()` is a documented no-op (real ROM semantics: the CPU can't write to it) — so the existing `loadProgram()` utility, which populates a `MemoryDevice` purely via `.write()`, **cannot** be used to load firmware into `ROM`; every byte would be silently discarded. `ROM` therefore also exposes `void load(uint16_t offset, uint8_t val)`, a host-side loader that bypasses that no-op (analogous to a real EPROM programmer writing out-of-band from the CPU's read-only bus access) — added alongside Task 2's `monitor::loadRoutine()`, which uses it. (Discovered during Task 2 execution: the original plan wrongly assumed `loadProgram()` would work on `ROM` the same way it does on `RAM` in the existing Fibonacci e2e test; the two tasks below folded this fix in as ROM is not covered by the CPU6502-freeze constraint.)
+- `loadRoutine(rom, busAddr, hex)` (`monitor_firmware.h`, via `ROM::load()`) writes at **device-relative offsets**, not bus addresses — the `Bus` does the address→offset translation (`addr - mapping.start`) for normal reads/writes, `loadRoutine()` does not. Since `ROM` is mapped at bus `0xC000`, every hex blob loaded into it must be loaded at `busAddress - 0xC000`, never at the raw bus address. This is the one place that subtraction happens, so it's never repeated (and never gotten wrong) at each call site.
 - Hex-string programs follow the existing project convention (see `test/cpu/cpu6502_fibonacci_e2e_test.cpp`): one string literal per instruction, each with a `//` comment giving the mnemonic and, where non-obvious, what it does.
 - New source files use the project's existing style: `#pragma once` headers, `explicit` single-argument constructors, member-init-list order matching declaration order.
 
@@ -227,6 +228,9 @@ Establishes `monitor_firmware.h`/`.cpp` (the address-constant table + `loadRouti
 Also establishes the routine-level test pattern used through Task 4: a shared `RoutineTestFixture` builds a `RAM`+`TTY`+`ROM`+`Bus`+`CPU6502`, loads just the routine(s) under test via `monitor::loadRoutine()`, loads a tiny hand-assembled "driver" snippet at the reserved `$C900` test page (never used by the real firmware) that sets up inputs, `JSR`s into the routine under test, and ends in `BRK`, points the reset vector at the driver, then runs via `cpu.run(N)`/`cpu.halted()` — the same pattern `cpu6502_fibonacci_e2e_test.cpp` already uses.
 
 **Files:**
+- Modify: `src/memory/rom.h`
+- Modify: `src/memory/rom.cpp`
+- Modify: `test/memory/rom_test.cpp`
 - Create: `src/system/monitor_firmware.h`
 - Create: `src/system/monitor_firmware.cpp`
 - Create: `test/system/routine_test_fixture.h`
@@ -234,17 +238,53 @@ Also establishes the routine-level test pattern used through Task 4: a shared `R
 - Modify: `test/CMakeLists.txt`
 
 **Interfaces:**
-- Consumes: `MemoryDevice` (`src/memory/memory_device.h`), `loadProgram()` (`src/utils/program_loader.h`).
-- Produces: `namespace monitor { constexpr uint16_t kRomBase, k*Addr (zero-page and routine constants), void loadRoutine(MemoryDevice&, uint16_t busAddr, const std::string &hex); }`. `RoutineTestFixture` (test-only): public members `ram`, `output` (`std::ostringstream`), `tty`, `rom`, `bus`, `cpu`; method `void loadDriver(const std::string &hex)`.
+- Consumes: `ROM` (`src/memory/rom.h`).
+- Produces: `ROM::load(uint16_t offset, uint8_t val)` (host-side loader, bypasses the CPU-facing `write()` no-op). `namespace monitor { constexpr uint16_t kRomBase, k*Addr (zero-page and routine constants), void loadRoutine(ROM&, uint16_t busAddr, const std::string &hex); }`. `RoutineTestFixture` (test-only): public members `ram`, `output` (`std::ostringstream`), `tty`, `rom`, `bus`, `cpu`; method `void loadDriver(const std::string &hex)`.
 
-- [ ] **Step 1: Write `monitor_firmware.h`/`.cpp` with the address table and `loadRoutine()`**
+- [ ] **Step 1: Add `ROM::load()`**
+
+`ROM::write()` is a documented no-op (real ROM semantics — the CPU can't write to it), so the existing `loadProgram()` utility (which populates a `MemoryDevice` purely via `.write()`) cannot be used to load firmware into `ROM`; every byte would be silently discarded. Add a distinct host-side loader that bypasses that no-op, the way a real EPROM programmer writes out-of-band from the CPU's read-only bus access.
+
+Edit `src/memory/rom.h`, add after the `write()` override declaration:
+
+```cpp
+    // Host-side loader (e.g. a ROM programmer, or a test/System building a
+    // firmware image) -- bypasses the ignore-and-log behavior write()
+    // uses for CPU-driven writes, which must stay a no-op to model real
+    // ROM semantics.
+    void load(uint16_t offset, uint8_t val);
+```
+
+Edit `src/memory/rom.cpp`, add after `ROM::write()`'s definition:
+
+```cpp
+void ROM::load(uint16_t offset, uint8_t val) { m_data[offset] = val; }
+```
+
+Add a test to `test/memory/rom_test.cpp`, after `WriteWithoutLoggerDoesNotCrash`:
+
+```cpp
+TEST(ROM, LoadBypassesTheWriteIgnoreBehavior) {
+    ROM rom(std::vector<uint8_t>{0xAA, 0xBB});
+
+    rom.load(0, 0xFF);
+
+    EXPECT_EQ(rom.read(0), 0xFF);
+    EXPECT_EQ(rom.read(1), 0xBB);
+}
+```
+
+Run: `cmake --build build --target sys6_tests && ctest --test-dir build --output-on-failure -R "ROM\."`
+Expected: all 5 `ROM.*` cases (4 existing + the new one) PASS.
+
+- [ ] **Step 2: Write `monitor_firmware.h`/`.cpp` with the address table and `loadRoutine()`**
 
 Create `src/system/monitor_firmware.h`:
 
 ```cpp
 #pragma once
 
-#include "memory/memory_device.h"
+#include "memory/rom.h"
 
 #include <cstdint>
 #include <string>
@@ -287,13 +327,13 @@ extern const std::string kPrintNibbleHex;
 extern const std::string kPrintStringHex;
 extern const std::string kHexValHex;
 
-// Writes `hex` into `rom` at device-relative offset (busAddr - kRomBase).
-// loadProgram() (src/utils/program_loader.h) writes at device-relative
-// offsets, not bus addresses -- Bus does that translation for normal
-// reads/writes, but loadProgram() talks to the MemoryDevice directly, so
-// every routine load has to do the subtraction itself. This is the one
-// place it happens.
-void loadRoutine(MemoryDevice &rom, uint16_t busAddr, const std::string &hex);
+// Writes `hex` into `rom` at device-relative offset (busAddr - kRomBase),
+// via ROM::load() -- not loadProgram()/MemoryDevice::write(), since
+// ROM::write() is deliberately a no-op and would silently discard every
+// byte. Bus does the bus-address-to-device-offset translation for normal
+// reads/writes; this talks to the ROM directly, so the subtraction
+// happens here too.
+void loadRoutine(ROM &rom, uint16_t busAddr, const std::string &hex);
 
 } // namespace monitor
 ```
@@ -303,12 +343,43 @@ Create `src/system/monitor_firmware.cpp`:
 ```cpp
 #include "monitor_firmware.h"
 
-#include "utils/program_loader.h"
+#include <cctype>
+#include <stdexcept>
 
 namespace monitor {
 
-void loadRoutine(MemoryDevice &rom, uint16_t busAddr, const std::string &hex) {
-    loadProgram(rom, static_cast<uint16_t>(busAddr - kRomBase), hex);
+namespace {
+int hexDigitValue(char c) {
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    throw std::invalid_argument("loadRoutine: invalid hex character");
+}
+} // namespace
+
+void loadRoutine(ROM &rom, uint16_t busAddr, const std::string &hex) {
+    std::string digits;
+    for (char c : hex) {
+        if (!std::isspace(static_cast<unsigned char>(c))) {
+            digits.push_back(c);
+        }
+    }
+    if (digits.size() % 2 != 0) {
+        throw std::invalid_argument("loadRoutine: hex string has odd digit count");
+    }
+
+    uint16_t offset = static_cast<uint16_t>(busAddr - kRomBase);
+    for (size_t i = 0; i < digits.size(); i += 2) {
+        auto byte = static_cast<uint8_t>((hexDigitValue(digits[i]) << 4) | hexDigitValue(digits[i + 1]));
+        rom.load(offset, byte);
+        offset = static_cast<uint16_t>(offset + 1);
+    }
 }
 
 // GETCHAR ($C000): busy-waits for RXRDY, reads and returns DATA in A. Does
@@ -394,7 +465,7 @@ const std::string kHexValHex =
 } // namespace monitor
 ```
 
-- [ ] **Step 2: Write the routine test fixture**
+- [ ] **Step 3: Write the routine test fixture**
 
 Create `test/system/routine_test_fixture.h`:
 
@@ -440,7 +511,7 @@ struct RoutineTestFixture {
 };
 ```
 
-- [ ] **Step 3: Write the failing routine tests**
+- [ ] **Step 4: Write the failing routine tests**
 
 Create `test/system/monitor_routines_test.cpp`:
 
@@ -540,22 +611,23 @@ TEST(MonitorRoutines, HexValRejectsNonHexAndSetsCarry) {
 }
 ```
 
-- [ ] **Step 4: Add the new files to the test build**
+- [ ] **Step 5: Add the new files to the test build**
 
 Edit `test/CMakeLists.txt`: add `system/monitor_routines_test.cpp` to the test source list and `${CMAKE_SOURCE_DIR}/src/system/monitor_firmware.cpp` to the production source list.
 
-- [ ] **Step 5: Run tests to verify they fail, then pass**
+- [ ] **Step 6: Run tests to verify they fail, then pass**
 
 Run: `cmake --build build --target sys6_tests 2>&1 | tail -30`
-Expected first: FAIL to compile (files referenced don't exist until Step 1/2 above are in place — if you're following this plan top-to-bottom the files already exist, so instead confirm the *tests* fail before Step 1's implementation and pass after; the two are combined in this task because the implementation was fully specified alongside the tests above).
+Expected first: FAIL to compile (files referenced don't exist until Steps 2/3 above are in place — if you're following this plan top-to-bottom the files already exist, so instead confirm the *tests* fail before Step 2's implementation and pass after; the two are combined in this task because the implementation was fully specified alongside the tests above).
 
 Run: `ctest --test-dir build --output-on-failure -R MonitorRoutines`
 Expected: all 6 `MonitorRoutines` cases PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/system/monitor_firmware.h src/system/monitor_firmware.cpp \
+git add src/memory/rom.h src/memory/rom.cpp test/memory/rom_test.cpp \
+        src/system/monitor_firmware.h src/system/monitor_firmware.cpp \
         test/system/routine_test_fixture.h test/system/monitor_routines_test.cpp \
         test/CMakeLists.txt
 git commit -m "feat: add monitor firmware I/O primitives (GETCHAR/PUTCHAR/PRINT_HEX_BYTE/PRINT_STRING/HEXVAL)"
@@ -1197,7 +1269,7 @@ This is where the firmware becomes a real, bootable system for the first time �
 
 **Interfaces:**
 - Consumes: every routine from Tasks 2–4.
-- Produces: `kReadLineAddr = 0xC400`, `kBannerAddr = 0xCE00`, `kPromptAddr = 0xCE0F`, `kColdStartAddr = 0xCF00`, `kWarmStartAddr = 0xCF0E`, `kMainLoopAddr = 0xCF11`, `void monitor::install(MemoryDevice &rom)` — loads every routine at its fixed address plus the NMI/RESET/BRK vectors, so callers just do `monitor::install(rom); cpu.reset();` and get a running monitor. `typeChar()`/`typeLine()` test helpers (`test/system/monitor_test_helpers.h`) that later tasks (System tests) reuse.
+- Produces: `kReadLineAddr = 0xC400`, `kBannerAddr = 0xCE00`, `kPromptAddr = 0xCE0F`, `kColdStartAddr = 0xCF00`, `kWarmStartAddr = 0xCF0E`, `kMainLoopAddr = 0xCF11`, `void monitor::install(ROM &rom)` — loads every routine at its fixed address plus the NMI/RESET/BRK vectors, so callers just do `monitor::install(rom); cpu.reset();` and get a running monitor. `typeChar()`/`typeLine()` test helpers (`test/system/monitor_test_helpers.h`) that later tasks (System tests) reuse.
 
 - [ ] **Step 1: Add the remaining address constants and `extern` hex declarations, plus `install()`**
 
@@ -1221,7 +1293,7 @@ extern const std::string kMainHex;
 
 // Loads every monitor routine plus the NMI/RESET/BRK vectors into `rom`.
 // After this, cpu.reset() boots straight into the interactive prompt.
-void install(MemoryDevice &rom);
+void install(ROM &rom);
 ```
 
 - [ ] **Step 2: Write the shared `typeChar`/`typeLine` test helpers**
@@ -1536,7 +1608,7 @@ const std::string kMainHex =
     "20 00 C1" //   JSR PUTCHAR
     "4C 11 CF"; //   JMP MAIN_LOOP
 
-void install(MemoryDevice &rom) {
+void install(ROM &rom) {
     loadRoutine(rom, kGetCharAddr, kGetCharHex);
     loadRoutine(rom, kPutCharAddr, kPutCharHex);
     loadRoutine(rom, kPrintHexByteAddr, kPrintHexByteHex);
