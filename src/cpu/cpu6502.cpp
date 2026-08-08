@@ -17,6 +17,7 @@ const uint8_t cOpADCZeroPageX = 0x75;
 const uint8_t cOpADCAbsoluteX = 0x7D;
 const uint8_t cOpADCAbsoluteY = 0x79;
 const uint8_t cOpADCIndirectX = 0x61;
+const uint8_t cOpADCIndirectY = 0x71;
 
 const auto cCFlagOffset = 0;
 const auto cZFlagOffset = 1;
@@ -174,6 +175,9 @@ void CPU6502::onClockHigh() {
     case cOpADCIndirectX:
         captureADCIndirectX();
         break;
+    case cOpADCIndirectY:
+        captureADCIndirectY();
+        break;
     default:
         break; // unimplemented opcode: nothing to capture
     }
@@ -206,6 +210,9 @@ void CPU6502::onClockLow() {
         break;
     case cOpADCIndirectX:
         commitADCIndirectX();
+        break;
+    case cOpADCIndirectY:
+        commitADCIndirectY();
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
@@ -496,6 +503,64 @@ void CPU6502::commitADCIndirectX() {
         break;
     case CpuStep::T4:
         m_cpuStep = CpuStep::T5;
+        break;
+    case CpuStep::T5:
+        commitAluResult();
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::captureADCIndirectY() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2:
+        m_effAddr = m_bus.read(m_addrLatch);
+        break;
+    case CpuStep::T3: {
+        auto pointerHigh = static_cast<uint16_t>(m_bus.read((m_addrLatch + 1) & 0xFF));
+        auto base = static_cast<uint16_t>(m_effAddr | (pointerHigh << 8));
+        EffectiveAddress resolved = indexedAddress(base, m_Y);
+        m_effAddr = resolved.address;
+        m_pageCrossed = resolved.pageCrossed;
+        break;
+    }
+    case CpuStep::T4:
+        if (!m_pageCrossed) {
+            loadAluInputs(m_bus.read(m_effAddr));
+        }
+        break;
+    case CpuStep::T5:
+        loadAluInputs(m_bus.read(m_effAddr));
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::commitADCIndirectY() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        if (m_pageCrossed) {
+            m_cpuStep = CpuStep::T5;
+        } else {
+            commitAluResult();
+            m_cpuStep = CpuStep::T0;
+        }
         break;
     case CpuStep::T5:
         commitAluResult();
