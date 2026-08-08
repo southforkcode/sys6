@@ -42,6 +42,12 @@ constexpr uint16_t kPeekAddr = 0xCA00;
 constexpr uint16_t kListAddr = 0xCB00;
 constexpr uint16_t kPokeAddr = 0xCC00;
 constexpr uint16_t kRunAddr = 0xCD00;
+constexpr uint16_t kReadLineAddr = 0xC400;
+constexpr uint16_t kBannerAddr = 0xCE00;
+constexpr uint16_t kPromptAddr = 0xCE0F;
+constexpr uint16_t kColdStartAddr = 0xCF00;
+constexpr uint16_t kWarmStartAddr = 0xCF0E;
+constexpr uint16_t kMainLoopAddr = 0xCF11;
 
 extern const std::string kGetCharHex;
 extern const std::string kPutCharHex;
@@ -56,6 +62,13 @@ extern const std::string kPeekHex;
 extern const std::string kListHex;
 extern const std::string kPokeHex;
 extern const std::string kRunHex;
+extern const std::string kReadLineHex;
+extern const std::string kDataHex;
+extern const std::string kMainHex;
+
+// Loads every monitor routine plus the NMI/RESET/BRK vectors into `rom`.
+// After this, cpu.reset() boots straight into the interactive prompt.
+void install(ROM &rom);
 
 // Writes `hex` into `rom` at device-relative offset (busAddr - kRomBase),
 // via ROM::load() -- not loadProgram()/MemoryDevice::write(), since

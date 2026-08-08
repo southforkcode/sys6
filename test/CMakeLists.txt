@@ -33,6 +33,7 @@ add_executable(sys6_tests
     utils/program_loader_test.cpp
     peripherals/tty_test.cpp
     system/monitor_routines_test.cpp
+    system/monitor_firmware_test.cpp
     ${CMAKE_SOURCE_DIR}/src/cpu/alu.cpp
     ${CMAKE_SOURCE_DIR}/src/cpu/cpu6502.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/ram.cpp

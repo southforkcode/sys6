@@ -360,4 +360,106 @@ const std::string kRunHex =
     "20 F8 00" //   JSR $00F8               (execute trampoline)
     "60";      //   RTS
 
+// READ_LINE ($C400): reads characters via GETCHAR into LINEBUF (indexed by
+// X), echoing each one via PUTCHAR as it's read (raw mode means the OS
+// won't echo for us), until CR. Backspace (DEL $7F or BS $08) erases the
+// last buffered character both in the buffer and visually ("\b \b"). A
+// full buffer (64 chars) silently drops further characters rather than
+// overflowing. Sets LINELEN to the final character count.
+const std::string kReadLineHex =
+    "A2 00"    // LDX #$00                 (X = 0, line length)
+    "20 00 C0" // LOOP: JSR GETCHAR
+    "C9 0D"    //   CMP #$0D                (CR?)
+    "F0 2C"    //   BEQ ENDLINE
+    "C9 7F"    //   CMP #$7F                (DEL?)
+    "F0 11"    //   BEQ BACKSPACE
+    "C9 08"    //   CMP #$08                (BS?)
+    "F0 0D"    //   BEQ BACKSPACE
+    "E0 40"    //   CPX #$40                (buffer full?)
+    "B0 ED"    //   BCS LOOP                (drop char if full)
+    "95 00"    //   STA $00,X               (LINEBUF[X] = A)
+    "20 00 C1" //   JSR PUTCHAR             (echo)
+    "E8"       //   INX
+    "4C 02 C4" //   JMP LOOP
+    "E0 00"    // BACKSPACE: CPX #$00
+    "F0 E0"    //   BEQ LOOP                (nothing to erase)
+    "CA"       //   DEX
+    "A9 08"    //   LDA #$08
+    "20 00 C1" //   JSR PUTCHAR             (backspace)
+    "A9 20"    //   LDA #$20
+    "20 00 C1" //   JSR PUTCHAR             (space)
+    "A9 08"    //   LDA #$08
+    "20 00 C1" //   JSR PUTCHAR             (backspace)
+    "4C 02 C4" //   JMP LOOP
+    "A9 0D"    // ENDLINE: LDA #$0D
+    "20 00 C1" //   JSR PUTCHAR             (CR)
+    "A9 0A"    //   LDA #$0A
+    "20 00 C1" //   JSR PUTCHAR             (LF)
+    "86 40"    //   STX $40                 (LINELEN = X)
+    "60";      //   RTS
+
+// Data at $CE00: BANNER ("sys6 monitor\r\n\0", 15 bytes) followed
+// immediately by PROMPT ("> \0", 3 bytes) at $CE0F.
+const std::string kDataHex =
+    "73 79 73 36 20 6D 6F 6E 69 74 6F 72 0D 0A 00" // "sys6 monitor\r\n\0"
+    "3E 20 00";                                     // "> \0"
+
+// COLD_START ($CF00): prints the banner, falls into MAIN_LOOP.
+// WARM_START ($CF0E, the BRK vector target): resets SP (so repeated
+// accidental BRKs during a long session don't let the stack drift) then
+// falls into MAIN_LOOP without the banner.
+// MAIN_LOOP ($CF11): prints the prompt, reads a line, parses the leading
+// address, dispatches it (or prints '?' on a parse failure), repeats
+// forever.
+const std::string kMainHex =
+    "A9 00"    // COLD_START: LDA #$00
+    "85 FC"    //   STA $FC                 (STRPTR lo = BANNER lo)
+    "A9 CE"    //   LDA #$CE
+    "85 FD"    //   STA $FD                 (STRPTR hi = BANNER hi)
+    "20 00 C3" //   JSR PRINT_STRING        (print banner)
+    "4C 11 CF" //   JMP MAIN_LOOP
+    "A2 FF"    // WARM_START: LDX #$FF
+    "9A"       //   TXS                     (reset stack pointer)
+    "A9 0F"    // MAIN_LOOP: LDA #$0F
+    "85 FC"    //   STA $FC                 (STRPTR lo = PROMPT lo)
+    "A9 CE"    //   LDA #$CE
+    "85 FD"    //   STA $FD                 (STRPTR hi = PROMPT hi)
+    "20 00 C3" //   JSR PRINT_STRING        (print prompt)
+    "20 00 C4" //   JSR READ_LINE
+    "A9 00"    //   LDA #$00
+    "85 41"    //   STA $41                 (LINEPOS = 0)
+    "20 00 C5" //   JSR PARSE_ADDR
+    "B0 06"    //   BCS BADLINE
+    "20 00 C8" //   JSR DISPATCH
+    "4C 11 CF" //   JMP MAIN_LOOP
+    "A9 3F"    // BADLINE: LDA #$3F         ('?')
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0D"    //   LDA #$0D
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0A"    //   LDA #$0A
+    "20 00 C1" //   JSR PUTCHAR
+    "4C 11 CF"; //   JMP MAIN_LOOP
+
+void install(ROM &rom) {
+    loadRoutine(rom, kGetCharAddr, kGetCharHex);
+    loadRoutine(rom, kPutCharAddr, kPutCharHex);
+    loadRoutine(rom, kPrintHexByteAddr, kPrintHexByteHex);
+    loadRoutine(rom, kPrintNibbleAddr, kPrintNibbleHex);
+    loadRoutine(rom, kPrintStringAddr, kPrintStringHex);
+    loadRoutine(rom, kReadLineAddr, kReadLineHex);
+    loadRoutine(rom, kParseAddrAddr, kParseAddrHex);
+    loadRoutine(rom, kParseByteAddr, kParseByteHex);
+    loadRoutine(rom, kHexValAddr, kHexValHex);
+    loadRoutine(rom, kDispatchAddr, kDispatchHex);
+    loadRoutine(rom, kPeekAddr, kPeekHex);
+    loadRoutine(rom, kListAddr, kListHex);
+    loadRoutine(rom, kPokeAddr, kPokeHex);
+    loadRoutine(rom, kRunAddr, kRunHex);
+    loadRoutine(rom, kBannerAddr, kDataHex);
+    loadRoutine(rom, kColdStartAddr, kMainHex);
+    loadRoutine(rom, 0xFFFA, "0E CF"); // NMI vector -> WARM_START
+    loadRoutine(rom, 0xFFFC, "00 CF"); // RESET vector -> COLD_START
+    loadRoutine(rom, 0xFFFE, "0E CF"); // BRK vector -> WARM_START
+}
+
 } // namespace monitor
