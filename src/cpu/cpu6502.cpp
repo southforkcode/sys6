@@ -12,6 +12,7 @@ const uint16_t cBRKVector = 0xfffe;
 
 const uint8_t cOpADCImmediate = 0x69;
 const uint8_t cOpADCAbsolute = 0x6D;
+const uint8_t cOpADCZeroPage = 0x65;
 
 const auto cCFlagOffset = 0;
 const auto cZFlagOffset = 1;
@@ -154,6 +155,9 @@ void CPU6502::onClockHigh() {
     case cOpADCAbsolute:
         captureADCAbsolute();
         break;
+    case cOpADCZeroPage:
+        captureADCZeroPage();
+        break;
     default:
         break; // unimplemented opcode: nothing to capture
     }
@@ -171,6 +175,9 @@ void CPU6502::onClockLow() {
         break;
     case cOpADCAbsolute:
         commitADCAbsolute();
+        break;
+    case cOpADCZeroPage:
+        commitADCZeroPage();
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
@@ -256,5 +263,33 @@ void CPU6502::commitADCAbsolute() {
     default:
         // Unreachable: this handler is only invoked while m_cpuStep is T1, T2, or T3.
         break;
+    }
+}
+
+void CPU6502::captureADCZeroPage() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2:
+        loadAluInputs(m_bus.read(m_addrLatch));
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1 or T2.
+    }
+}
+
+void CPU6502::commitADCZeroPage() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        commitAluResult();
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1 or T2.
     }
 }

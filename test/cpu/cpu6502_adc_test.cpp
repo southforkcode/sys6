@@ -225,3 +225,39 @@ TEST_F(CPU6502AdcTest, AdcAbsoluteDoesNotUpdateAUntilFinalPhaseOfLastCycle) {
     cpu.tick(); // T3 phase 4/4: commit -- A and flags updated
     EXPECT_EQ(cpu.A(), 0x15);
 }
+
+TEST_F(CPU6502AdcTest, AdcZeroPageAddsOperandFromMemory) {
+    ram.write(0x0000, 0x65);
+    ram.write(0x0001, 0x10); // zero page address
+    ram.write(0x0010, 0x05);
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.CFlag(false);
+
+    cpu.executeInstruction();
+
+    EXPECT_EQ(cpu.A(), 0x15);
+    EXPECT_EQ(cpu.PC(), 0x0002);
+}
+
+TEST_F(CPU6502AdcTest, TwelveTicksCompleteAdcZeroPageWithAUnchangedUntilFinalCycle) {
+    ram.write(0x0000, 0x65);
+    ram.write(0x0001, 0x10);
+    ram.write(0x0010, 0x05);
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.CFlag(false);
+
+    for (int i = 0; i < 8; ++i) {
+        cpu.tick();
+    }
+    EXPECT_EQ(cpu.PC(), 0x0002);
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+
+    EXPECT_EQ(cpu.A(), 0x15);
+}

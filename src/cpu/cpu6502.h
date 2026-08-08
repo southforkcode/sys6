@@ -108,4 +108,6 @@ private:
     void commitADCImmediate();
     void captureADCAbsolute();
     void commitADCAbsolute();
+    void captureADCZeroPage();
+    void commitADCZeroPage();
 };
