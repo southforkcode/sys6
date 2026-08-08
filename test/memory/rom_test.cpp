@@ -28,3 +28,12 @@ TEST(ROM, WriteWithoutLoggerDoesNotCrash) {
     rom.write(0, 0xFF);
     EXPECT_EQ(rom.read(0), 0xAA);
 }
+
+TEST(ROM, LoadBypassesTheWriteIgnoreBehavior) {
+    ROM rom(std::vector<uint8_t>{0xAA, 0xBB});
+
+    rom.load(0, 0xFF);
+
+    EXPECT_EQ(rom.read(0), 0xFF);
+    EXPECT_EQ(rom.read(1), 0xBB);
+}

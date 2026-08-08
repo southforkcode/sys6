@@ -32,6 +32,7 @@ add_executable(sys6_tests
     memory/bus_test.cpp
     utils/program_loader_test.cpp
     peripherals/tty_test.cpp
+    system/monitor_routines_test.cpp
     ${CMAKE_SOURCE_DIR}/src/cpu/alu.cpp
     ${CMAKE_SOURCE_DIR}/src/cpu/cpu6502.cpp
     ${CMAKE_SOURCE_DIR}/src/memory/ram.cpp
@@ -40,6 +41,7 @@ add_executable(sys6_tests
     ${CMAKE_SOURCE_DIR}/src/utils/log.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/program_loader.cpp
     ${CMAKE_SOURCE_DIR}/src/peripherals/tty.cpp
+    ${CMAKE_SOURCE_DIR}/src/system/monitor_firmware.cpp
 )
 
 target_include_directories(sys6_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)

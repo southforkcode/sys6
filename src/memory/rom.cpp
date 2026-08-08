@@ -16,3 +16,5 @@ void ROM::write(uint16_t offset, uint8_t val) {
         m_logger->warn("Ignored write to ROM at offset " + std::to_string(offset));
     }
 }
+
+void ROM::load(uint16_t offset, uint8_t val) { m_data[offset] = val; }

@@ -17,6 +17,12 @@ public:
     uint8_t read(uint16_t offset) const override;
     void write(uint16_t offset, uint8_t val) override;
 
+    // Host-side loader (e.g. a ROM programmer, or a test/System building a
+    // firmware image) -- bypasses the ignore-and-log behavior write()
+    // uses for CPU-driven writes, which must stay a no-op to model real
+    // ROM semantics.
+    void load(uint16_t offset, uint8_t val);
+
 private:
     std::vector<uint8_t> m_data;
     Logger *m_logger = nullptr;
