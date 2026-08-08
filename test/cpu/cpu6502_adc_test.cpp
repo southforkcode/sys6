@@ -462,3 +462,74 @@ TEST_F(CPU6502AdcTest, TwentyTicksCompleteAdcAbsoluteYWithPageCrossing) {
 
     EXPECT_EQ(cpu.A(), 0x15);
 }
+
+TEST_F(CPU6502AdcTest, AdcIndirectXAddsOperandThroughPointerTable) {
+    ram.write(0x0000, 0x61);
+    ram.write(0x0001, 0x10); // bb
+    ram.write(0x0015, 0x00); // (bb + X) = 0x15 -> pointer low byte
+    ram.write(0x0016, 0x02); // pointer high byte -> effective address 0x0200
+    ram.write(0x0200, 0x05);
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.X(0x05);
+    cpu.CFlag(false);
+
+    cpu.executeInstruction();
+
+    EXPECT_EQ(cpu.A(), 0x15);
+    EXPECT_EQ(cpu.PC(), 0x0002);
+}
+
+TEST_F(CPU6502AdcTest, AdcIndirectXWrapsPointerTableAddressWithinZeroPage) {
+    ram.write(0x0000, 0x61);
+    ram.write(0x0001, 0xFF); // bb
+    ram.write(0x0004, 0x00); // (0xFF + 0x05) & 0xFF = 0x04 -> pointer low byte
+    ram.write(0x0005, 0x02); // pointer high byte -> effective address 0x0200
+    ram.write(0x0200, 0x05);
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.X(0x05);
+
+    cpu.executeInstruction();
+
+    EXPECT_EQ(cpu.A(), 0x15);
+}
+
+TEST_F(CPU6502AdcTest, AdcIndirectXWrapsPointerHighByteWithinZeroPage) {
+    ram.write(0x0300, 0x61);
+    ram.write(0x0301, 0xFD); // bb
+    ram.write(0x00FF, 0x00); // (bb + X) & 0xFF = 0xFF -> pointer low byte
+    ram.write(0x0000, 0x02); // pointer high byte wraps to zero page address 0x00 -> effective address 0x0200
+    ram.write(0x0200, 0x05);
+    cpu.reset();
+    cpu.PC(0x0300);
+    cpu.A(0x10);
+    cpu.X(0x02);
+
+    cpu.executeInstruction();
+
+    EXPECT_EQ(cpu.A(), 0x15);
+}
+
+TEST_F(CPU6502AdcTest, TwentyFourTicksCompleteAdcIndirectXWithAUnchangedUntilFinalCycle) {
+    ram.write(0x0000, 0x61);
+    ram.write(0x0001, 0x10);
+    ram.write(0x0015, 0x00);
+    ram.write(0x0016, 0x02);
+    ram.write(0x0200, 0x05);
+    cpu.reset();
+    cpu.A(0x10);
+    cpu.X(0x05);
+
+    for (int i = 0; i < 20; ++i) {
+        cpu.tick();
+    }
+    EXPECT_EQ(cpu.A(), 0x10);
+
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+    cpu.tick();
+
+    EXPECT_EQ(cpu.A(), 0x15);
+}

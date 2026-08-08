@@ -16,6 +16,7 @@ const uint8_t cOpADCZeroPage = 0x65;
 const uint8_t cOpADCZeroPageX = 0x75;
 const uint8_t cOpADCAbsoluteX = 0x7D;
 const uint8_t cOpADCAbsoluteY = 0x79;
+const uint8_t cOpADCIndirectX = 0x61;
 
 const auto cCFlagOffset = 0;
 const auto cZFlagOffset = 1;
@@ -170,6 +171,9 @@ void CPU6502::onClockHigh() {
     case cOpADCAbsoluteY:
         captureADCAbsoluteY();
         break;
+    case cOpADCIndirectX:
+        captureADCIndirectX();
+        break;
     default:
         break; // unimplemented opcode: nothing to capture
     }
@@ -199,6 +203,9 @@ void CPU6502::onClockLow() {
         break;
     case cOpADCAbsoluteY:
         commitADCAbsoluteY();
+        break;
+    case cOpADCIndirectX:
+        commitADCIndirectX();
         break;
     default:
         // TODO: remaining opcodes are not yet implemented; treat as a 1-cycle no-op.
@@ -450,5 +457,51 @@ void CPU6502::commitADCAbsoluteY() {
         break;
     default:
         break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T4.
+    }
+}
+
+void CPU6502::captureADCIndirectX() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_addrLatch = m_bus.read(m_PC);
+        break;
+    case CpuStep::T2:
+        m_addrLatch = (m_addrLatch + m_X) & 0xFF;
+        break;
+    case CpuStep::T3:
+        m_effAddr = m_bus.read(m_addrLatch);
+        break;
+    case CpuStep::T4:
+        m_effAddr |= static_cast<uint16_t>(m_bus.read((m_addrLatch + 1) & 0xFF)) << 8;
+        break;
+    case CpuStep::T5:
+        loadAluInputs(m_bus.read(m_effAddr));
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
+    }
+}
+
+void CPU6502::commitADCIndirectX() {
+    switch (m_cpuStep) {
+    case CpuStep::T1:
+        m_PC++;
+        m_cpuStep = CpuStep::T2;
+        break;
+    case CpuStep::T2:
+        m_cpuStep = CpuStep::T3;
+        break;
+    case CpuStep::T3:
+        m_cpuStep = CpuStep::T4;
+        break;
+    case CpuStep::T4:
+        m_cpuStep = CpuStep::T5;
+        break;
+    case CpuStep::T5:
+        commitAluResult();
+        m_cpuStep = CpuStep::T0;
+        break;
+    default:
+        break; // Unreachable: this handler is only invoked while m_cpuStep is T1-T5.
     }
 }

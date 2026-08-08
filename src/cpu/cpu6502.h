@@ -116,4 +116,6 @@ private:
     void commitADCAbsoluteX();
     void captureADCAbsoluteY();
     void commitADCAbsoluteY();
+    void captureADCIndirectX();
+    void commitADCIndirectX();
 };
