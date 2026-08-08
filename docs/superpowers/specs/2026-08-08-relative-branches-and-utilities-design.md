@@ -88,6 +88,52 @@ the first use of `0x0100 + m_SP` addressing. `m_SP` is `uint8_t`, so
 `m_SP--` wraps naturally at the page-1 boundary the way real 6502 stack
 pointer wraparound does.
 
+## Minimal load/store additions (LDA/STA) — discovered while designing the e2e test
+
+The Fibonacci e2e program needs to write computed values into memory, but
+this codebase has no opcode that can move a value into memory at all: only
+ALU ops (which read memory into a computation), shifts, INC/DEC (which
+nudge a memory cell by ±1, not assign an arbitrary value), and
+INX/DEX/INY/DEY exist. Without a store instruction, no program can write
+its results anywhere. This is a genuine prerequisite gap, not scope creep
+for its own sake — confirmed with the user before proceeding.
+
+Four new opcodes, added to `CPU6502` following the exact same
+family/capture/commit pattern as everything else in this file:
+
+| Mnemonic | Mode | Opcode | Cycles |
+|---|---|---|---|
+| LDA | Immediate | 0xA9 | 2 |
+| LDA | Zero Page | 0xA5 | 3 |
+| STA | Zero Page | 0x85 | 3 |
+| STA | Absolute,Y | 0x99 | 5 (fixed, like RMW absolute,X — a store can't shortcut the extra cycle the way a read can) |
+
+LDA is implemented as a "load family" that reuses the ALU's combinational
+path rather than introducing a separate code path: `m_aluA = 0`,
+`m_aluB = <fetched byte>`, `m_aluFunction = AluFunction::OR` makes
+`m_aluOutput.value` equal the fetched byte (`b | 0 == b`) while still going
+through the same `aluZero()`/`aluNegative()` flag helpers every other
+opcode uses. This mirrors how INC/DEC already route through `AluFunction::ADD`
+with `a = 0x01`/`0xFF` instead of having bespoke increment/decrement logic.
+Real LDA does not affect the C or V flags, so only Z and N are set from
+`m_aluOutput` in commit — C is deliberately left untouched.
+
+STA does not affect any flags (real 6502 behavior) and needs no ALU
+involvement; capture stages are idle placeholders (matching the existing
+idle-capture convention used by e.g. `captureRmwZeroPage`), and the actual
+`m_bus.write()` happens in the final commit step.
+
+**Why no CLC was needed:** the e2e program's only comparison-like operation
+for its loop counter is `DEC` on a dedicated zero-page counter cell, not
+`CPY`/`CMP`/`CPX` — and per the existing `commitUnaryAluFlags()` comment,
+INC/DEC deliberately leave C untouched. Since none of LDA/STA/DEC/INY touch
+C, and the Fibonacci values in this program never exceed 255 (so ADC's own
+carry-out is always false), the carry flag never needs an explicit reset
+between iterations. This was verified by hand-tracing the full 10-iteration
+program before finalizing it (see the E2E section below) — an explicit
+`CLC` opcode was considered and is not needed for this program, so it's not
+part of this change.
+
 ## `run()` driver helper
 
 ```cpp
@@ -125,13 +171,23 @@ addresses coincide. No `Bus` indirection is needed for this utility.
 A hand-assembled 6502 program, provided to the test as a hex string and
 loaded via `loadProgram`, that:
 
-1. Computes the Fibonacci sequence 0, 1, 1, 2, 3, 5, 8, 13, 21, 34 using `A`
-   and a zero-page temp for the running previous/current values.
-2. Stores each of the 10 values to `$0200..$0209` via an indexed store
-   (`STA $0200,Y` with `Y` as the loop counter).
-3. Loops using `INY` / `CPY #10` / `BNE` — this is what exercises the new
-   branch instructions end-to-end, not just in isolation.
+1. Initializes zero-page cells `$F0` (`a`, running previous term) to 0,
+   `$F1` (`b`, running current term) to 1, and `$F3` (loop counter) to 10.
+2. Each iteration: loads `a` from `$F0` into `A`, stores it to `$0200,Y`
+   (`Y` is the 0-based output index), computes `newB = a + b` via
+   `ADC $F1`, stashes it in scratch cell `$F2`, then shuffles
+   `$F0 = old b`, `$F1 = newB`.
+3. Increments `Y`, decrements the `$F3` counter, and loops via `BNE` while
+   the counter is nonzero — this is what exercises the new branch
+   instructions end-to-end, not just in isolation.
 4. Ends with `BRK`.
+
+This produces the sequence 0, 1, 1, 2, 3, 5, 8, 13, 21, 34 at `$0200..$0209`
+(verified by hand-tracing all 10 iterations while designing this spec).
+Zero-page addresses `$F0-$F3` are used (not `$10-$13`) specifically because
+the program's own machine code occupies addresses `$0000-$0022`, and using
+low zero-page addresses would have the program overwrite its own
+instructions mid-execution.
 
 Test body:
 
@@ -149,7 +205,12 @@ ASSERT_TRUE(cpu.run(10000));
   timing (3 vs. 4 cycles), forward and backward offsets.
 - `test/cpu/cpu6502_brk_test.cpp`: stack contents after BRK (pushed PCH,
   PCL, P with B set), `SP` decremented by 3, `IFlag()` set, `PC` loaded from
-  `cBRKVector`, `halted()` becomes true.
+  `cBRKVector`, `halted()` becomes true; also covers `run()` stopping on
+  `halted()` and returning `false` when its instruction cap is exhausted.
+- `test/cpu/cpu6502_load_store_test.cpp`: LDA immediate/zero page (value,
+  Z/N flags, C left untouched, cycle counts), STA zero page/absolute,Y
+  (memory write correctness, no flags touched, fixed 5-cycle timing for
+  absolute,Y regardless of page crossing).
 - `test/utils/program_loader_test.cpp`: valid hex loads correctly into a
   `RAM`, whitespace-separated and unseparated input both work, odd-length
   and non-hex-character input throw `std::invalid_argument`.
@@ -159,6 +220,10 @@ ASSERT_TRUE(cpu.run(10000));
 
 ## Out of scope
 
+- CLC/SEC and other flag-control opcodes — not needed by the e2e program
+  (see the load/store section above for why) and not otherwise requested.
+- Any further load/store addressing modes or registers (LDX/LDY/STX/STY,
+  other LDA/STA addressing modes) beyond the four opcodes listed above.
 - NMI/IRQ hardware-pin interrupt handling (only the BRK software interrupt
   path is implemented).
 - RTI (return from interrupt) — not needed since the e2e program never
