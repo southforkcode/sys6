@@ -26,7 +26,7 @@ struct RoutineTestFixture {
 
     RoutineTestFixture() {
         bus.attach(0x0000, 0x7FFF, ram);
-        bus.attach(0x8000, 0x8001, tty);
+        bus.attach(0x8000, 0x80FF, tty);
         bus.attach(0xC000, 0xFFFF, rom);
     }
 

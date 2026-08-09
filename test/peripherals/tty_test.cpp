@@ -4,12 +4,6 @@
 
 #include <sstream>
 
-TEST(TTYTest, SizeIsTwoBytes) {
-    std::ostringstream out;
-    TTY tty(out);
-    EXPECT_EQ(tty.size(), 2u);
-}
-
 TEST(TTYTest, StatusRxReadyBitClearUntilAByteArrives) {
     std::ostringstream out;
     TTY tty(out);

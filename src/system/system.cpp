@@ -10,7 +10,7 @@ System::System(TerminalIO &term, std::ostream &out)
     : m_term(term), m_ram(kRamSize), m_tty(out), m_rom(std::vector<uint8_t>(monitor::kRomSize)),
       m_cpu(m_bus) {
     m_bus.attach(0x0000, 0x7FFF, m_ram);
-    m_bus.attach(0x8000, 0x8001, m_tty);
+    m_bus.attach(0x8000, 0x80FF, m_tty);
     m_bus.attach(0xC000, 0xFFFF, m_rom);
     monitor::install(m_rom);
 }

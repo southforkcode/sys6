@@ -32,6 +32,7 @@ add_executable(sys6_tests
     memory/bus_test.cpp
     utils/program_loader_test.cpp
     peripherals/tty_test.cpp
+    peripherals/tty_tape_test.cpp
     system/monitor_routines_test.cpp
     system/monitor_firmware_test.cpp
     system/system_test.cpp
