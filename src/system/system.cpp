@@ -6,8 +6,8 @@ namespace {
 constexpr uint16_t kRamSize = 0x8000;
 } // namespace
 
-System::System(TerminalIO &term, std::ostream &out)
-    : m_term(term), m_ram(kRamSize), m_tty(out), m_rom(std::vector<uint8_t>(monitor::kRomSize)),
+System::System(TerminalIO &term, std::ostream &out, std::iostream *tapeBacking)
+    : m_term(term), m_ram(kRamSize), m_tty(out, tapeBacking), m_rom(std::vector<uint8_t>(monitor::kRomSize)),
       m_cpu(m_bus) {
     m_bus.attach(0x0000, 0x7FFF, m_ram);
     m_bus.attach(0x8000, 0x80FF, m_tty);

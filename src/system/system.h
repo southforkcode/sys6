@@ -11,7 +11,7 @@
 
 class System {
 public:
-    System(TerminalIO &term, std::ostream &out);
+    System(TerminalIO &term, std::ostream &out, std::iostream *tapeBacking = nullptr);
 
     void reset(); // resets the CPU -- exposed so tests can drive step()
                    // from a known state without going through run()'s
