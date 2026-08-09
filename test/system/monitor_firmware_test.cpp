@@ -14,12 +14,12 @@ namespace {
 struct MonitorFixture {
     RAM ram{0x8000};
     std::ostringstream output;
-    TTY tty{output};
+    TTY tty;
     ROM rom{std::vector<uint8_t>(monitor::kRomSize)};
     Bus bus;
     CPU6502 cpu{bus};
 
-    MonitorFixture() {
+    explicit MonitorFixture(std::iostream *tapeBacking = nullptr) : tty(output, tapeBacking) {
         bus.attach(0x0000, 0x7FFF, ram);
         bus.attach(0x8000, 0x80FF, tty);
         bus.attach(0xC000, 0xFFFF, rom);
@@ -173,5 +173,63 @@ TEST(MonitorFirmwareE2E, AddressEdgeCasesParseCorrectly) {
     typeLine(fx.cpu, fx.tty, "FFFF"); // top of the address space: BRK-vector hi byte
     std::string expected = kBannerAndPrompt;
     expected += "5\r\n0005: 00\r\n> FFFF\r\nFFFF: CF\r\n> ";
+    EXPECT_EQ(fx.output.str(), expected);
+}
+
+TEST(MonitorFirmwareE2E, SaveRewindLoadRoundTrip) {
+    std::stringstream tape;
+    MonitorFixture fx(&tape);
+    fx.ram.write(0x0050, 0xAA);
+    fx.ram.write(0x0051, 0xBB);
+    fx.ram.write(0x0052, 0xCC);
+    fx.cpu.reset();
+    typeLine(fx.cpu, fx.tty, "0050.0052 S");
+    typeLine(fx.cpu, fx.tty, "0 W");
+    typeLine(fx.cpu, fx.tty, "0070 L");
+    typeLine(fx.cpu, fx.tty, "0070");
+    std::string expected = kBannerAndPrompt;
+    expected += "0050.0052 S\r\n> ";
+    expected += "0 W\r\n> ";
+    expected += "0070 L\r\n> ";
+    expected += "0070\r\n0070: AA\r\n> ";
+    EXPECT_EQ(fx.output.str(), expected);
+    EXPECT_EQ(fx.ram.read(0x0071), 0xBB);
+    EXPECT_EQ(fx.ram.read(0x0072), 0xCC);
+}
+
+TEST(MonitorFirmwareE2E, LoadWithCorruptedChecksumStillLandsPartialDataAndReportsError) {
+    std::stringstream tape;
+    MonitorFixture fx(&tape);
+    fx.ram.write(0x0050, 0xAA);
+    fx.ram.write(0x0051, 0xBB);
+    fx.cpu.reset();
+    typeLine(fx.cpu, fx.tty, "0050.0051 S");
+    std::string saved = tape.str();
+    ASSERT_EQ(saved.size(), 5u); // LEN(2) + 2 data bytes + checksum
+    saved.back() = static_cast<char>(saved.back() ^ 0xFF); // corrupt the checksum
+    tape.str(saved);
+    typeLine(fx.cpu, fx.tty, "0 W");
+    typeLine(fx.cpu, fx.tty, "0070 L");
+    std::string expected = kBannerAndPrompt;
+    expected += "0050.0051 S\r\n> ";
+    expected += "0 W\r\n> ";
+    expected += "0070 L\r\n?\r\n> ";
+    EXPECT_EQ(fx.output.str(), expected);
+    EXPECT_EQ(fx.ram.read(0x0070), 0xAA);
+    EXPECT_EQ(fx.ram.read(0x0071), 0xBB);
+}
+
+TEST(MonitorFirmwareE2E, TapeCommandsFailCleanlyWithNoTapeAttachedAndPromptStaysUsable) {
+    MonitorFixture fx; // no tape backing
+    fx.cpu.reset();
+    typeLine(fx.cpu, fx.tty, "0050.0051 S");
+    typeLine(fx.cpu, fx.tty, "0 W");
+    typeLine(fx.cpu, fx.tty, "0070 L");
+    typeLine(fx.cpu, fx.tty, "0300");
+    std::string expected = kBannerAndPrompt;
+    expected += "0050.0051 S\r\n?\r\n> ";
+    expected += "0 W\r\n?\r\n> ";
+    expected += "0070 L\r\n?\r\n> ";
+    expected += "0300\r\n0300: 00\r\n> "; // prompt is still fully usable afterward
     EXPECT_EQ(fx.output.str(), expected);
 }
