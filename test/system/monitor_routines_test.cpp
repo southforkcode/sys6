@@ -443,3 +443,72 @@ TEST(MonitorRoutines, SavePrintsQuestionMarkWhenEndIsBeforeStart) {
     EXPECT_EQ(fx.output.str(), "?\r\n");
     EXPECT_EQ(tape.str(), "");
 }
+
+TEST(MonitorRoutines, LoadReadsLengthPrefixedBlockIntoRam) {
+    std::stringstream tape(std::string("\x03\x00\xAA\xBB\xCC\xDD", 6));
+    RoutineTestFixture fx(&tape);
+    monitor::loadRoutine(fx.rom, monitor::kLoadAddr, monitor::kLoadHex);
+    fx.loadDriver("A9 70"    // LDA #$70
+                  "85 F0"    // STA $F0   (target lo = $70)
+                  "A9 00"    // LDA #$00
+                  "85 F1"    // STA $F1   (target hi)
+                  "20 00 D1" // JSR $D100 (LOAD)
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.ram.read(0x0070), 0xAA);
+    EXPECT_EQ(fx.ram.read(0x0071), 0xBB);
+    EXPECT_EQ(fx.ram.read(0x0072), 0xCC);
+    EXPECT_EQ(fx.tty.read(0x02) & 0x02, 0); // motor off after LOAD completes
+}
+
+TEST(MonitorRoutines, LoadPrintsQuestionMarkAndKeepsPartialDataOnChecksumMismatch) {
+    std::stringstream tape(std::string("\x03\x00\xAA\xBB\xCC\x00", 6)); // wrong checksum
+    RoutineTestFixture fx(&tape);
+    monitor::loadRoutine(fx.rom, monitor::kPutCharAddr, monitor::kPutCharHex);
+    monitor::loadRoutine(fx.rom, monitor::kLoadAddr, monitor::kLoadHex);
+    fx.loadDriver("A9 70"
+                  "85 F0"
+                  "A9 00"
+                  "85 F1"
+                  "20 00 D1" // JSR $D100 (LOAD)
+                  "00");
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.output.str(), "?\r\n");
+    EXPECT_EQ(fx.ram.read(0x0070), 0xAA); // already-read bytes are NOT rolled back
+    EXPECT_EQ(fx.ram.read(0x0071), 0xBB);
+    EXPECT_EQ(fx.ram.read(0x0072), 0xCC);
+}
+
+TEST(MonitorRoutines, LoadPrintsQuestionMarkWhenTapeRunsOutMidBlock) {
+    std::stringstream tape(std::string("\x05\x00\xAA", 3)); // claims 5 bytes, gives 1
+    RoutineTestFixture fx(&tape);
+    monitor::loadRoutine(fx.rom, monitor::kPutCharAddr, monitor::kPutCharHex);
+    monitor::loadRoutine(fx.rom, monitor::kLoadAddr, monitor::kLoadHex);
+    fx.loadDriver("A9 70"
+                  "85 F0"
+                  "A9 00"
+                  "85 F1"
+                  "20 00 D1" // JSR $D100 (LOAD)
+                  "00");
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.output.str(), "?\r\n");
+    EXPECT_EQ(fx.ram.read(0x0070), 0xAA); // the one byte that was available landed
+}
+
+TEST(MonitorRoutines, LoadPrintsQuestionMarkWithNoTapePresent) {
+    RoutineTestFixture fx; // no tape backing
+    monitor::loadRoutine(fx.rom, monitor::kPutCharAddr, monitor::kPutCharHex);
+    monitor::loadRoutine(fx.rom, monitor::kLoadAddr, monitor::kLoadHex);
+    fx.loadDriver("A9 70"
+                  "85 F0"
+                  "A9 00"
+                  "85 F1"
+                  "20 00 D1" // JSR $D100 (LOAD)
+                  "00");
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.output.str(), "?\r\n");
+}

@@ -510,6 +510,80 @@ const std::string kSaveHex =
     "20 00 C1" //   JSR PUTCHAR
     "60";      //   RTS
 
+// LOAD ($D100): entered with $F0/$F1 = target RAM address. Prints '?'
+// without writing anything if no tape is present. Otherwise turns the
+// motor on, reads a 2-byte little-endian LEN into $42/$43 via the
+// READ_TAPE_BYTE helper (same carry-flag success/fail convention as
+// HEXVAL/PARSE_ADDR/PARSE_BYTE elsewhere in this file), then reads that
+// many data bytes, writing each to RAM at the target cursor and folding
+// it into a running checksum in $44 as it goes, then reads and verifies
+// a trailing checksum byte. Any tape failure (end-of-tape, or a checksum
+// mismatch after a full read) prints '?' -- bytes already written by
+// that point are NOT rolled back. Always turns the motor back off before
+// returning, on every path.
+const std::string kLoadHex =
+    "AD 02 80" // LOAD: LDA $8002          (TAPE_STATUS)
+    "29 01"    //   AND #$01               (PRESENT bit)
+    "D0 03"    //   BNE LOAD_PRESENT_OK
+    "4C 5E D1" //   JMP LOAD_ERROR
+    "A9 01"    // LOAD_PRESENT_OK: LDA #$01
+    "8D 03 80" //   STA $8003              (motor on)
+    "20 6E D1" //   JSR READ_TAPE_BYTE     (LEN lo)
+    "B0 3C"    //   BCS LOAD_ERROR_MOTOROFF
+    "85 42"    //   STA $42
+    "20 6E D1" //   JSR READ_TAPE_BYTE     (LEN hi)
+    "B0 35"    //   BCS LOAD_ERROR_MOTOROFF
+    "85 43"    //   STA $43
+    "A9 00"    //   LDA #$00
+    "85 44"    //   STA $44                (checksum = 0)
+    "A5 42"    // LOAD_LOOP: LDA $42
+    "05 43"    //   ORA $43                (LEN == 0?)
+    "F0 20"    //   BEQ LOAD_VERIFY
+    "20 6E D1" //   JSR READ_TAPE_BYTE     (next data byte)
+    "B0 24"    //   BCS LOAD_ERROR_MOTOROFF
+    "48"       //   PHA                    (save byte)
+    "45 44"    //   EOR $44
+    "85 44"    //   STA $44                (checksum updated)
+    "68"       //   PLA                    (restore original byte)
+    "A0 00"    //   LDY #$00
+    "91 F0"    //   STA ($F0),Y            (write to RAM at cursor)
+    "E6 F0"    //   INC $F0
+    "D0 02"    //   BNE LOAD_NOCARRY
+    "E6 F1"    //   INC $F1
+    "A5 42"    // LOAD_NOCARRY: LDA $42
+    "D0 02"    //   BNE LOAD_DECLO
+    "C6 43"    //   DEC $43
+    "C6 42"    // LOAD_DECLO: DEC $42
+    "4C 21 D1" //   JMP LOAD_LOOP
+    "20 6E D1" // LOAD_VERIFY: JSR READ_TAPE_BYTE  (checksum byte)
+    "B0 04"    //   BCS LOAD_ERROR_MOTOROFF
+    "C5 44"    //   CMP $44
+    "F0 08"    //   BEQ LOAD_OK
+    "A9 00"    // LOAD_ERROR_MOTOROFF: LDA #$00
+    "8D 03 80" //   STA $8003              (motor off)
+    "4C 5E D1" //   JMP LOAD_ERROR
+    "A9 00"    // LOAD_OK: LDA #$00
+    "8D 03 80" //   STA $8003              (motor off)
+    "60"       //   RTS
+    "A9 3F"    // LOAD_ERROR: LDA #$3F     ('?')
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0D"    //   LDA #$0D
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0A"    //   LDA #$0A
+    "20 00 C1" //   JSR PUTCHAR
+    "60"       //   RTS
+    "AD 04 80" // READ_TAPE_BYTE: LDA $8004   (TAPE_DATA)
+    "48"       //   PHA                       (save byte)
+    "AD 02 80" //   LDA $8002                 (TAPE_STATUS)
+    "29 08"    //   AND #$08                  (ERROR bit)
+    "F0 03"    //   BEQ RTB_OK
+    "68"       //   PLA                       (discard, balance stack)
+    "38"       //   SEC                       (signal failure)
+    "60"       //   RTS
+    "68"       // RTB_OK: PLA                 (restore byte)
+    "18"       //   CLC                       (signal success)
+    "60";      //   RTS
+
 // REWIND ($D200): if a tape is present, seeks it to position 0 and clears
 // EOT/ERROR by writing TAPE_CONTROL's rewind-strobe bit (also turning the
 // motor off, since a plain register write sets the whole byte). Otherwise
@@ -549,6 +623,7 @@ void install(ROM &rom) {
     loadRoutine(rom, kBannerAddr, kDataHex);
     loadRoutine(rom, kColdStartAddr, kMainHex);
     loadRoutine(rom, kSaveAddr, kSaveHex);
+    loadRoutine(rom, kLoadAddr, kLoadHex);
     loadRoutine(rom, kRewindAddr, kRewindHex);
     loadRoutine(rom, 0xFFFA, "0E CF"); // NMI vector -> WARM_START
     loadRoutine(rom, 0xFFFC, "00 CF"); // RESET vector -> COLD_START
