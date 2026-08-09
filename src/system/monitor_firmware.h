@@ -48,6 +48,7 @@ constexpr uint16_t kPromptAddr = 0xCE0F;
 constexpr uint16_t kColdStartAddr = 0xCF00;
 constexpr uint16_t kWarmStartAddr = 0xCF0E;
 constexpr uint16_t kMainLoopAddr = 0xCF11;
+constexpr uint16_t kRewindAddr = 0xD200;
 
 extern const std::string kGetCharHex;
 extern const std::string kPutCharHex;
@@ -65,6 +66,7 @@ extern const std::string kRunHex;
 extern const std::string kReadLineHex;
 extern const std::string kDataHex;
 extern const std::string kMainHex;
+extern const std::string kRewindHex;
 
 // Loads every monitor routine plus the NMI/RESET/BRK vectors into `rom`.
 // After this, cpu.reset() boots straight into the interactive prompt.

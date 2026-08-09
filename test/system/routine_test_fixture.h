@@ -19,12 +19,12 @@
 struct RoutineTestFixture {
     RAM ram{0x8000};
     std::ostringstream output;
-    TTY tty{output};
+    TTY tty;
     ROM rom{std::vector<uint8_t>(monitor::kRomSize)};
     Bus bus;
     CPU6502 cpu{bus};
 
-    RoutineTestFixture() {
+    explicit RoutineTestFixture(std::iostream *tapeBacking = nullptr) : tty(output, tapeBacking) {
         bus.attach(0x0000, 0x7FFF, ram);
         bus.attach(0x8000, 0x80FF, tty);
         bus.attach(0xC000, 0xFFFF, rom);

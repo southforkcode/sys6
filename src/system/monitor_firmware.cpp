@@ -440,6 +440,27 @@ const std::string kMainHex =
     "20 00 C1" //   JSR PUTCHAR
     "4C 11 CF"; //   JMP MAIN_LOOP
 
+// REWIND ($D200): if a tape is present, seeks it to position 0 and clears
+// EOT/ERROR by writing TAPE_CONTROL's rewind-strobe bit (also turning the
+// motor off, since a plain register write sets the whole byte). Otherwise
+// prints '?'. The caller's address in $F0/$F1 is required by DISPATCH's
+// grammar but unused here.
+const std::string kRewindHex =
+    "AD 02 80" // REWIND: LDA $8002    (TAPE_STATUS)
+    "29 01"    //   AND #$01           (PRESENT bit)
+    "D0 03"    //   BNE REWIND_OK
+    "4C 10 D2" //   JMP REWIND_ERROR
+    "A9 02"    // REWIND_OK: LDA #$02  (REWIND bit, motor bit clear)
+    "8D 03 80" //   STA $8003          (TAPE_CONTROL)
+    "60"       //   RTS
+    "A9 3F"    // REWIND_ERROR: LDA #$3F  ('?')
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0D"    //   LDA #$0D
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0A"    //   LDA #$0A
+    "20 00 C1" //   JSR PUTCHAR
+    "60";      //   RTS
+
 void install(ROM &rom) {
     loadRoutine(rom, kGetCharAddr, kGetCharHex);
     loadRoutine(rom, kPutCharAddr, kPutCharHex);
@@ -457,6 +478,7 @@ void install(ROM &rom) {
     loadRoutine(rom, kRunAddr, kRunHex);
     loadRoutine(rom, kBannerAddr, kDataHex);
     loadRoutine(rom, kColdStartAddr, kMainHex);
+    loadRoutine(rom, kRewindAddr, kRewindHex);
     loadRoutine(rom, 0xFFFA, "0E CF"); // NMI vector -> WARM_START
     loadRoutine(rom, 0xFFFC, "00 CF"); // RESET vector -> COLD_START
     loadRoutine(rom, 0xFFFE, "0E CF"); // BRK vector -> WARM_START

@@ -349,3 +349,37 @@ TEST(MonitorRoutines, DispatchPrintsQuestionMarkOnMalformedSuffix) {
     ASSERT_TRUE(fx.cpu.run(5000));
     EXPECT_EQ(fx.output.str(), "?\r\n");
 }
+
+TEST(MonitorRoutines, RewindResetsPositionAndClearsEot) {
+    std::stringstream tape("A");
+    RoutineTestFixture fx(&tape);
+    monitor::loadRoutine(fx.rom, monitor::kPutCharAddr, monitor::kPutCharHex);
+    monitor::loadRoutine(fx.rom, monitor::kRewindAddr, monitor::kRewindHex);
+    fx.loadDriver("A9 01"    // LDA #$01
+                  "8D 03 80" // STA $8003          (motor on)
+                  "AD 04 80" // LDA $8004          (consume the only byte)
+                  "AD 04 80" // LDA $8004          (hits EOF -> EOT/ERROR set)
+                  "20 00 D2" // JSR $D200          (REWIND)
+                  "AD 02 80" // LDA $8002          (STATUS after rewind)
+                  "85 50"    // STA $50
+                  "A9 01"    // LDA #$01
+                  "8D 03 80" // STA $8003          (motor on again)
+                  "AD 04 80" // LDA $8004          (re-read -- should be 'A' again)
+                  "85 51"    // STA $51
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.ram.read(0x50), 0x01); // PRESENT only -- MOTOR/EOT/ERROR all clear
+    EXPECT_EQ(fx.ram.read(0x51), 'A');  // position truly reset to 0
+}
+
+TEST(MonitorRoutines, RewindPrintsQuestionMarkWithNoTapePresent) {
+    RoutineTestFixture fx; // no tape backing
+    monitor::loadRoutine(fx.rom, monitor::kPutCharAddr, monitor::kPutCharHex);
+    monitor::loadRoutine(fx.rom, monitor::kRewindAddr, monitor::kRewindHex);
+    fx.loadDriver("20 00 D2" // JSR $D200 (REWIND)
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.output.str(), "?\r\n");
+}
