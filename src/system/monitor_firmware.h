@@ -48,7 +48,11 @@ constexpr uint16_t kPromptAddr = 0xCE0F;
 constexpr uint16_t kColdStartAddr = 0xCF00;
 constexpr uint16_t kWarmStartAddr = 0xCF0E;
 constexpr uint16_t kMainLoopAddr = 0xCF11;
+constexpr uint16_t kSaveAddr = 0xD000;
 constexpr uint16_t kRewindAddr = 0xD200;
+constexpr uint16_t kTapeLenLoAddr = 0x0042;
+constexpr uint16_t kTapeLenHiAddr = 0x0043;
+constexpr uint16_t kTapeChecksumAddr = 0x0044;
 
 extern const std::string kGetCharHex;
 extern const std::string kPutCharHex;
@@ -66,6 +70,7 @@ extern const std::string kRunHex;
 extern const std::string kReadLineHex;
 extern const std::string kDataHex;
 extern const std::string kMainHex;
+extern const std::string kSaveHex;
 extern const std::string kRewindHex;
 
 // Loads every monitor routine plus the NMI/RESET/BRK vectors into `rom`.

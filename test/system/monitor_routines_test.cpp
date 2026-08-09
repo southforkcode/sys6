@@ -383,3 +383,63 @@ TEST(MonitorRoutines, RewindPrintsQuestionMarkWithNoTapePresent) {
     ASSERT_TRUE(fx.cpu.run(5000));
     EXPECT_EQ(fx.output.str(), "?\r\n");
 }
+
+TEST(MonitorRoutines, SaveWritesLengthDataAndChecksumToTape) {
+    std::stringstream tape;
+    RoutineTestFixture fx(&tape);
+    monitor::loadRoutine(fx.rom, monitor::kSaveAddr, monitor::kSaveHex);
+    fx.ram.write(0x0050, 0xAA);
+    fx.ram.write(0x0051, 0xBB);
+    fx.ram.write(0x0052, 0xCC);
+    fx.loadDriver("A9 50"    // LDA #$50
+                  "85 F0"    // STA $F0   (START lo = $50)
+                  "A9 00"    // LDA #$00
+                  "85 F1"    // STA $F1   (START hi)
+                  "A9 52"    // LDA #$52
+                  "85 F2"    // STA $F2   (END lo = $52)
+                  "A9 00"    // LDA #$00
+                  "85 F3"    // STA $F3   (END hi)
+                  "20 00 D0" // JSR $D000 (SAVE)
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(tape.str(), std::string("\x03\x00\xAA\xBB\xCC\xDD", 6));
+    EXPECT_EQ(fx.tty.read(0x02) & 0x02, 0); // motor off after SAVE completes
+}
+
+TEST(MonitorRoutines, SavePrintsQuestionMarkWithNoTapePresent) {
+    RoutineTestFixture fx; // no tape backing
+    monitor::loadRoutine(fx.rom, monitor::kPutCharAddr, monitor::kPutCharHex);
+    monitor::loadRoutine(fx.rom, monitor::kSaveAddr, monitor::kSaveHex);
+    fx.loadDriver("A9 00"    // LDA #$00
+                  "85 F0"    // STA $F0
+                  "85 F1"    // STA $F1
+                  "85 F2"    // STA $F2
+                  "85 F3"    // STA $F3
+                  "20 00 D0" // JSR $D000 (SAVE)
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.output.str(), "?\r\n");
+}
+
+TEST(MonitorRoutines, SavePrintsQuestionMarkWhenEndIsBeforeStart) {
+    std::stringstream tape;
+    RoutineTestFixture fx(&tape);
+    monitor::loadRoutine(fx.rom, monitor::kPutCharAddr, monitor::kPutCharHex);
+    monitor::loadRoutine(fx.rom, monitor::kSaveAddr, monitor::kSaveHex);
+    fx.loadDriver("A9 52"    // LDA #$52
+                  "85 F0"    // STA $F0   (START = $0052)
+                  "A9 00"    // LDA #$00
+                  "85 F1"    // STA $F1
+                  "A9 50"    // LDA #$50
+                  "85 F2"    // STA $F2   (END = $0050, before START)
+                  "A9 00"    // LDA #$00
+                  "85 F3"    // STA $F3
+                  "20 00 D0" // JSR $D000 (SAVE)
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.output.str(), "?\r\n");
+    EXPECT_EQ(tape.str(), "");
+}

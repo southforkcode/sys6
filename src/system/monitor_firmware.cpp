@@ -440,6 +440,76 @@ const std::string kMainHex =
     "20 00 C1" //   JSR PUTCHAR
     "4C 11 CF"; //   JMP MAIN_LOOP
 
+// SAVE ($D000): entered with $F0/$F1 = inclusive range START, $F2/$F3 =
+// inclusive range END (the same setup DISPATCH's '.' handling already
+// builds before jumping to LIST -- SAVE reuses it identically). Prints
+// '?' without touching the tape if no tape is present, or if END is
+// before START. Otherwise: turns the tape motor on, computes LEN =
+// END-START+1 into $42/$43, writes LEN_LO/LEN_HI, walks START..END
+// (mirrors LIST's own loop-and-compare structure) writing each byte and
+// XORing it into a running checksum in $44, writes the checksum, turns
+// the motor back off.
+const std::string kSaveHex =
+    "AD 02 80" // SAVE: LDA $8002      (TAPE_STATUS)
+    "29 01"    //   AND #$01           (PRESENT bit)
+    "D0 03"    //   BNE PRESENT_OK
+    "4C 70 D0" //   JMP SAVE_ERROR
+    "A5 F3"    // PRESENT_OK: LDA $F3  (END hi)
+    "C5 F1"    //   CMP $F1            (START hi)
+    "90 08"    //   BCC R1             (END hi < START hi -> bad range)
+    "D0 09"    //   BNE RANGE_OK       (END hi > START hi -> ok)
+    "A5 F2"    //   LDA $F2            (END lo)
+    "C5 F0"    //   CMP $F0            (START lo)
+    "B0 03"    //   BCS RANGE_OK       (END lo >= START lo -> ok)
+    "4C 70 D0" // R1: JMP SAVE_ERROR
+    "A9 01"    // RANGE_OK: LDA #$01
+    "8D 03 80" //   STA $8003          (motor on)
+    "38"       //   SEC
+    "A5 F2"    //   LDA $F2            (END lo)
+    "E5 F0"    //   SBC $F0            (- START lo)
+    "85 42"    //   STA $42            (LEN lo, pre-increment)
+    "A5 F3"    //   LDA $F3            (END hi)
+    "E5 F1"    //   SBC $F1            (- START hi)
+    "85 43"    //   STA $43            (LEN hi)
+    "E6 42"    //   INC $42            (LEN += 1, 16-bit)
+    "D0 02"    //   BNE LENOK
+    "E6 43"    //   INC $43
+    "A9 00"    // LENOK: LDA #$00
+    "85 44"    //   STA $44            (checksum = 0)
+    "A5 42"    //   LDA $42
+    "8D 04 80" //   STA $8004          (write LEN lo)
+    "A5 43"    //   LDA $43
+    "8D 04 80" //   STA $8004          (write LEN hi)
+    "A5 F1"    // SAVE_LOOP: LDA $F1   (cursor hi)
+    "C5 F3"    //   CMP $F3            (END hi)
+    "90 0A"    //   BCC SAVE_CONT
+    "D0 1C"    //   BNE SAVE_DONE
+    "A5 F0"    //   LDA $F0            (cursor lo)
+    "C5 F2"    //   CMP $F2            (END lo)
+    "F0 02"    //   BEQ SAVE_CONT
+    "B0 14"    //   BCS SAVE_DONE
+    "A0 00"    // SAVE_CONT: LDY #$00
+    "B1 F0"    //   LDA ($F0),Y        (byte at cursor)
+    "8D 04 80" //   STA $8004          (write it to tape)
+    "45 44"    //   EOR $44            (fold into checksum)
+    "85 44"    //   STA $44
+    "E6 F0"    //   INC $F0
+    "D0 02"    //   BNE SAVE_NOCARRY
+    "E6 F1"    //   INC $F1
+    "4C 41 D0" // SAVE_NOCARRY: JMP SAVE_LOOP
+    "A5 44"    // SAVE_DONE: LDA $44
+    "8D 04 80" //   STA $8004          (write checksum)
+    "A9 00"    //   LDA #$00
+    "8D 03 80" //   STA $8003          (motor off)
+    "60"       //   RTS
+    "A9 3F"    // SAVE_ERROR: LDA #$3F  ('?')
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0D"    //   LDA #$0D
+    "20 00 C1" //   JSR PUTCHAR
+    "A9 0A"    //   LDA #$0A
+    "20 00 C1" //   JSR PUTCHAR
+    "60";      //   RTS
+
 // REWIND ($D200): if a tape is present, seeks it to position 0 and clears
 // EOT/ERROR by writing TAPE_CONTROL's rewind-strobe bit (also turning the
 // motor off, since a plain register write sets the whole byte). Otherwise
@@ -478,6 +548,7 @@ void install(ROM &rom) {
     loadRoutine(rom, kRunAddr, kRunHex);
     loadRoutine(rom, kBannerAddr, kDataHex);
     loadRoutine(rom, kColdStartAddr, kMainHex);
+    loadRoutine(rom, kSaveAddr, kSaveHex);
     loadRoutine(rom, kRewindAddr, kRewindHex);
     loadRoutine(rom, 0xFFFA, "0E CF"); // NMI vector -> WARM_START
     loadRoutine(rom, 0xFFFC, "00 CF"); // RESET vector -> COLD_START
