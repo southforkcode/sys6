@@ -190,9 +190,9 @@ const std::string kParseByteHex =
     "60";      //   RTS
 
 // DISPATCH ($C800): called with LINEPOS just past a successfully-parsed
-// address in ADDR ($F0/$F1). Inspects LINEBUF[LINEPOS] and tail-jumps into
-// PEEK/LIST/POKE/RUN (so their own RTS returns straight to DISPATCH's
-// caller), or prints '?'+CRLF and returns itself.
+// address in ADDR ($F0/$F1). Inspects LINEBUF[LINEPOS] and tail-jumps
+// into PEEK/LIST/POKE/RUN/SAVE/LOAD/REWIND (so their own RTS returns
+// straight to DISPATCH's caller), or prints '?'+CRLF and returns itself.
 const std::string kDispatchHex =
     "A5 41"    // DISPATCH: LDA $41         (LINEPOS)
     "C5 40"    //   CMP $40                 (LINELEN)
@@ -203,17 +203,17 @@ const std::string kDispatchHex =
     "C9 2E"    //   CMP #$2E                ('.')
     "F0 0B"    //   BEQ DOLIST
     "C9 3A"    //   CMP #$3A                (':')
-    "F0 31"    //   BEQ DOPOKE
+    "F0 4D"    //   BEQ DOPOKE
     "C9 20"    //   CMP #$20                (' ')
-    "F0 32"    //   BEQ MAYBERUN
-    "4C 5B C8" //   JMP ERROR
+    "F0 4E"    //   BEQ MAYBERUN
+    "4C 88 C8" //   JMP ERROR
     "E6 41"    // DOLIST: INC $41           (skip '.')
     "A5 F0"    //   LDA $F0
     "85 F2"    //   STA $F2                 (stash first-addr lo)
     "A5 F1"    //   LDA $F1
     "85 F3"    //   STA $F3                 (stash first-addr hi)
     "20 00 C5" //   JSR PARSE_ADDR          (second address -> $F0/$F1)
-    "B0 30"    //   BCS ERROR               (invalid second address)
+    "B0 5D"    //   BCS ERROR               (invalid second address)
     "A5 F0"    //   LDA $F0
     "85 F5"    //   STA $F5                 (temp = second addr lo)
     "A5 F1"    //   LDA $F1
@@ -226,17 +226,38 @@ const std::string kDispatchHex =
     "85 F2"    //   STA $F2                 ($F2/$F3 = second addr = END)
     "A5 F6"    //   LDA $F6
     "85 F3"    //   STA $F3
-    "4C 00 CB" //   JMP LIST
+    "A5 41"    //   LDA $41                 (LINEPOS)
+    "C5 40"    //   CMP $40                 (LINELEN)
+    "90 03"    //   BCC DOLIST_CHECKSAVE    (not end of line -- maybe " S")
+    "4C 00 CB" //   JMP LIST                (end of line -> list, unchanged)
+    "A6 41"    // DOLIST_CHECKSAVE: LDX $41
+    "B5 00"    //   LDA $00,X               (char right after the range)
+    "C9 20"    //   CMP #$20                (' ')
+    "D0 34"    //   BNE ERROR
+    "E8"       //   INX                     (skip the space)
+    "E4 40"    //   CPX $40
+    "B0 2F"    //   BCS ERROR               (nothing after the space)
+    "B5 00"    //   LDA $00,X
+    "C9 53"    //   CMP #$53                ('S')
+    "D0 29"    //   BNE ERROR
+    "4C 00 D0" //   JMP SAVE
     "E6 41"    // DOPOKE: INC $41           (skip ':')
     "4C 00 CC" //   JMP POKE
     "A6 41"    // MAYBERUN: LDX $41
     "E8"       //   INX                     (skip the space)
     "E4 40"    //   CPX $40
-    "B0 09"    //   BCS ERROR               (nothing after space)
+    "B0 1A"    //   BCS ERROR               (nothing after the space)
     "B5 00"    //   LDA $00,X
     "C9 52"    //   CMP #$52                ('R')
-    "D0 03"    //   BNE ERROR
-    "4C 00 CD" //   JMP RUN
+    "F0 0B"    //   BEQ DORUN
+    "C9 4C"    //   CMP #$4C                ('L')
+    "F0 0A"    //   BEQ DOLOAD
+    "C9 57"    //   CMP #$57                ('W')
+    "F0 09"    //   BEQ DOREWIND
+    "4C 88 C8" //   JMP ERROR
+    "4C 00 CD" // DORUN: JMP RUN
+    "4C 00 D1" // DOLOAD: JMP LOAD
+    "4C 00 D2" // DOREWIND: JMP REWIND
     "A9 3F"    // ERROR: LDA #$3F           ('?')
     "20 00 C1" //   JSR PUTCHAR
     "A9 0D"    //   LDA #$0D

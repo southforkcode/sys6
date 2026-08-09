@@ -217,6 +217,9 @@ void loadDispatchDeps(RoutineTestFixture &fx) {
     monitor::loadRoutine(fx.rom, monitor::kListAddr, monitor::kListHex);
     monitor::loadRoutine(fx.rom, monitor::kPokeAddr, monitor::kPokeHex);
     monitor::loadRoutine(fx.rom, monitor::kRunAddr, monitor::kRunHex);
+    monitor::loadRoutine(fx.rom, monitor::kSaveAddr, monitor::kSaveHex);
+    monitor::loadRoutine(fx.rom, monitor::kLoadAddr, monitor::kLoadHex);
+    monitor::loadRoutine(fx.rom, monitor::kRewindAddr, monitor::kRewindHex);
 }
 } // namespace
 
@@ -508,6 +511,117 @@ TEST(MonitorRoutines, LoadPrintsQuestionMarkWithNoTapePresent) {
                   "85 F1"
                   "20 00 D1" // JSR $D100 (LOAD)
                   "00");
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(5000));
+    EXPECT_EQ(fx.output.str(), "?\r\n");
+}
+
+TEST(MonitorRoutines, DispatchSavesRangeAsBlock) {
+    std::stringstream tape;
+    RoutineTestFixture fx(&tape);
+    loadDispatchDeps(fx);
+    fx.ram.write(0x0050, 0xAA);
+    fx.ram.write(0x0051, 0xBB);
+    // LINEBUF = ".0051 S", LINEPOS = 0, LINELEN = 7; $F0/$F1 already
+    // holds the first address ($0050), as if MAIN_LOOP's PARSE_ADDR had
+    // already run.
+    fx.loadDriver("A9 2E"    // LDA #$2E  ('.')
+                  "85 00"    // STA $00
+                  "A9 30"    // LDA #$30  ('0')
+                  "85 01"    // STA $01
+                  "A9 30"    // LDA #$30  ('0')
+                  "85 02"    // STA $02
+                  "A9 35"    // LDA #$35  ('5')
+                  "85 03"    // STA $03
+                  "A9 31"    // LDA #$31  ('1')
+                  "85 04"    // STA $04
+                  "A9 20"    // LDA #$20  (' ')
+                  "85 05"    // STA $05
+                  "A9 53"    // LDA #$53  ('S')
+                  "85 06"    // STA $06
+                  "A9 07"    // LDA #$07
+                  "85 40"    // STA $40   (LINELEN = 7)
+                  "A9 00"    // LDA #$00
+                  "85 41"    // STA $41   (LINEPOS = 0)
+                  "A9 50"    // LDA #$50
+                  "85 F0"    // STA $F0   (ADDR = $0050)
+                  "A9 00"    // LDA #$00
+                  "85 F1"    // STA $F1
+                  "20 00 C8" // JSR DISPATCH
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(10000));
+    EXPECT_EQ(tape.str(), std::string("\x02\x00\xAA\xBB\x11", 5)); // LEN=2, data, checksum=0xAA^0xBB=0x11
+}
+
+TEST(MonitorRoutines, DispatchLoadsBlockIntoRam) {
+    std::stringstream tape(std::string("\x02\x00\xAA\xBB\x11", 5));
+    RoutineTestFixture fx(&tape);
+    loadDispatchDeps(fx);
+    // LINEBUF = " L", LINEPOS = 0, LINELEN = 2; $F0/$F1 = $0070.
+    fx.loadDriver("A9 20"    // LDA #$20  (' ')
+                  "85 00"    // STA $00
+                  "A9 4C"    // LDA #$4C  ('L')
+                  "85 01"    // STA $01
+                  "A9 02"    // LDA #$02
+                  "85 40"    // STA $40   (LINELEN = 2)
+                  "A9 00"    // LDA #$00
+                  "85 41"    // STA $41   (LINEPOS = 0)
+                  "A9 70"    // LDA #$70
+                  "85 F0"    // STA $F0   (ADDR = $0070)
+                  "A9 00"    // LDA #$00
+                  "85 F1"    // STA $F1
+                  "20 00 C8" // JSR DISPATCH
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(10000));
+    EXPECT_EQ(fx.ram.read(0x0070), 0xAA);
+    EXPECT_EQ(fx.ram.read(0x0071), 0xBB);
+}
+
+TEST(MonitorRoutines, DispatchRewindsTape) {
+    std::stringstream tape("A");
+    RoutineTestFixture fx(&tape);
+    loadDispatchDeps(fx);
+    // First, directly exhaust the tape so EOT/ERROR are set (bypassing
+    // DISPATCH -- this is just test setup).
+    fx.tty.write(0x03, 0x01); // motor on
+    fx.tty.read(0x04);        // consume 'A'
+    fx.tty.read(0x04);        // hits EOF
+    fx.tty.write(0x03, 0x00); // motor off
+    // LINEBUF = " W", LINEPOS = 0, LINELEN = 2; $F0/$F1 value is
+    // irrelevant to REWIND but required by the grammar.
+    fx.loadDriver("A9 20"    // LDA #$20  (' ')
+                  "85 00"    // STA $00
+                  "A9 57"    // LDA #$57  ('W')
+                  "85 01"    // STA $01
+                  "A9 02"    // LDA #$02
+                  "85 40"    // STA $40   (LINELEN = 2)
+                  "A9 00"    // LDA #$00
+                  "85 41"    // STA $41   (LINEPOS = 0)
+                  "85 F0"    // STA $F0
+                  "85 F1"    // STA $F1
+                  "20 00 C8" // JSR DISPATCH
+                  "00");     // BRK
+    fx.cpu.reset();
+    ASSERT_TRUE(fx.cpu.run(10000));
+    EXPECT_EQ(fx.tty.read(0x02), 0x01); // PRESENT only -- EOT/ERROR cleared, motor off
+}
+
+TEST(MonitorRoutines, DispatchStillPrintsQuestionMarkOnUnrecognizedTrailingLetter) {
+    RoutineTestFixture fx;
+    loadDispatchDeps(fx);
+    // LINEBUF = " X", LINEPOS = 0, LINELEN = 2 -- 'X' is none of R/L/W.
+    fx.loadDriver("A9 20"    // LDA #$20  (' ')
+                  "85 00"    // STA $00
+                  "A9 58"    // LDA #$58  ('X')
+                  "85 01"    // STA $01
+                  "A9 02"    // LDA #$02
+                  "85 40"    // STA $40   (LINELEN = 2)
+                  "A9 00"    // LDA #$00
+                  "85 41"    // STA $41   (LINEPOS = 0)
+                  "20 00 C8" // JSR DISPATCH
+                  "00");     // BRK
     fx.cpu.reset();
     ASSERT_TRUE(fx.cpu.run(5000));
     EXPECT_EQ(fx.output.str(), "?\r\n");
